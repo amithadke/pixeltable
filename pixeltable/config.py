@@ -15,6 +15,9 @@ _logger = logging.getLogger('pixeltable')
 
 T = TypeVar('T')
 
+# Remote API base URL for @remote-decorated function calls (list_dirs, list_tables, ls, create_dir, drop_table, drop_dir)
+PIXELTABLE_API_URL = os.environ.get('PIXELTABLE_API_URL', 'https://internal-api.pixeltable.com')
+
 
 class Config:
     """

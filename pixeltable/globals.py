@@ -14,6 +14,8 @@ from pixeltable.catalog import Catalog, TableVersionPath
 from pixeltable.catalog.insertable_table import OnErrorParameter
 from pixeltable.config import Config
 from pixeltable.env import Env
+from pixeltable.public_decorator import public
+from pixeltable.remote_decorator import remote
 from pixeltable.io.table_data_conduit import QueryTableDataConduit, TableDataConduit
 from pixeltable.iterators import ComponentIterator
 
@@ -46,6 +48,7 @@ def init(config_overrides: dict[str, Any] | None = None) -> None:
     _ = Catalog.get()
 
 
+@public
 def create_table(
     path: str,
     schema: dict[str, Any] | None = None,
@@ -221,6 +224,7 @@ def create_table(
     return tbl
 
 
+@public
 def create_view(
     path: str,
     base: catalog.Table | Query,
@@ -350,6 +354,7 @@ def create_view(
     )
 
 
+@public
 def create_snapshot(
     path_str: str,
     base: catalog.Table | Query,
@@ -569,6 +574,7 @@ def move(
     Catalog.get().move(path_obj, new_path_obj, if_exists_, if_not_exists_)
 
 
+@remote(path_params=['table'])
 def drop_table(
     table: str | catalog.Table, force: bool = False, if_not_exists: Literal['error', 'ignore'] = 'error'
 ) -> None:
@@ -681,6 +687,7 @@ def _assemble_dir_contents(
             tables.append(path)
 
 
+@remote(path_params=['dir_path'])
 def list_tables(dir_path: str = '', recursive: bool = True) -> list[str]:
     """List the [`Table`][pixeltable.Table]s in a directory.
 
@@ -713,6 +720,7 @@ def _list_tables(dir_path: str = '', recursive: bool = True, allow_system_paths:
     return [str(p) for p in _extract_paths(contents, parent=path_obj, entry_type=catalog.Table)]
 
 
+@remote(path_params=['path'])
 def create_dir(
     path: str, *, if_exists: Literal['error', 'ignore', 'replace', 'replace_force'] = 'error', parents: bool = False
 ) -> catalog.Dir | None:
@@ -765,6 +773,7 @@ def create_dir(
     return Catalog.get().create_dir(path_obj, if_exists=if_exists_, parents=parents)
 
 
+@remote(path_params=['path'])
 def drop_dir(path: str, force: bool = False, if_not_exists: Literal['error', 'ignore'] = 'error') -> None:
     """Remove a directory.
 
@@ -807,6 +816,7 @@ def drop_dir(path: str, force: bool = False, if_not_exists: Literal['error', 'ig
     Catalog.get().drop_dir(path_obj, if_not_exists=if_not_exists_, force=force)
 
 
+@remote(path_params=['path'])
 def ls(path: str = '') -> pd.DataFrame:
     """
     List the contents of a Pixeltable directory.
@@ -891,6 +901,7 @@ def _extract_paths(
     return result
 
 
+@remote(path_params=['path'])
 def list_dirs(path: str = '', recursive: bool = True) -> list[str]:
     """List the directories in a directory.
 
