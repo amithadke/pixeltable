@@ -98,7 +98,7 @@ class DeleteEnvironmentResponse(BaseModel):
 
 # ── Run (shared record, referenced by ServiceRecord) ─────────────────────────
 
-class RunRecord(BaseModel):
+class ServiceRunRecord(BaseModel):
     run_id: str
     service_id: str
     org_id: str
@@ -127,7 +127,7 @@ class ServiceRecord(BaseModel):
     scale_to_zero: bool
     description: Optional[str]
     created_at: float
-    current_run: Optional[RunRecord] = None
+    current_run: Optional[ServiceRunRecord] = None
 
 
 class CreateServiceRequest(BaseModel):
@@ -226,7 +226,7 @@ class BundleRecord(BaseModel):
 
 class FinalizeDeployResponse(BaseModel):
     bundle: BundleRecord
-    run: RunRecord
+    run: ServiceRunRecord
 
 
 # ── Service run history (read-only) ──────────────────────────────────────────
@@ -237,7 +237,7 @@ class GetServiceRunRequest(BaseModel):
 
 
 class GetServiceRunResponse(BaseModel):
-    run: RunRecord
+    run: ServiceRunRecord
 
 
 class ListServiceRunsRequest(BaseModel):
@@ -246,4 +246,4 @@ class ListServiceRunsRequest(BaseModel):
 
 
 class ListServiceRunsResponse(BaseModel):
-    runs: list[RunRecord]
+    runs: list[ServiceRunRecord]
