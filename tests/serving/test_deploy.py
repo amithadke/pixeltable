@@ -15,9 +15,10 @@ import pixeltable as pxt
 from pixeltable import exceptions as excs, metadata
 from pixeltable.config import Config
 from pixeltable.runtime import get_runtime
+from pixeltable.serving._config import create_service_from_config, lookup_service_config
 from pixeltable.serving.bootstrap import _create_tables_from_md
 from pixeltable.serving.deploy import build_deploy_bundle
-from tests.utils import pxt_raises, reload_catalog
+from tests.utils import pxt_raises, reload_catalog, skip_test_if_not_installed
 
 
 class TestDeploy:
@@ -126,6 +127,60 @@ class TestDeploy:
             tbl_id = UUID(record['tbl_md']['tbl_id'])
             with catalog.begin_xact(for_write=False):
                 assert catalog.get_table_by_id(tbl_id) is not None, f'table {tbl_id} not found by UUID'
+
+    def test_bootstrap_then_serve(self, uses_db: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Bootstrap recreates tables from metadata.json and pxt serve routes work on top of them."""
+        skip_test_if_not_installed('fastapi')
+        from fastapi.testclient import TestClient
+
+        _ = pxt.create_table('table1', {'id': pxt.Int, 'name': pxt.String})
+
+        config_path = tmp_path / 'pixeltable.toml'
+        config_path.write_text(textwrap.dedent("""\
+            [[environment]]
+            name = "test-serve"
+            services = ["mysvc"]
+
+            [[service]]
+            name = "mysvc"
+
+            [[service.routes]]
+            type = "insert"
+            table = "table1"
+            path = "/insert"
+            """))
+        monkeypatch.chdir(tmp_path)
+        Config.init({}, reinit=True)
+
+        bundle_path = build_deploy_bundle('test-serve')
+
+        with tarfile.open(bundle_path, 'r:bz2') as tar:
+            with tar.extractfile(tar.getmember('metadata.json')) as f:
+                tables_md = json.loads(f.read().decode('utf-8'))['tables_md']
+
+        # Simulate container bootstrap: drop the original table, recreate from metadata.
+        pxt.drop_table('table1')
+        _create_tables_from_md(tables_md)
+        reload_catalog()
+
+        # pxt serve: build the FastAPI app from the config bundled with the deploy.
+        with tarfile.open(bundle_path, 'r:bz2') as tar:
+            with tar.extractfile(tar.getmember('config.toml')) as f:
+                (tmp_path / 'pixeltable.toml').write_bytes(f.read())
+        Config.init({}, reinit=True)
+
+        svc_cfg = lookup_service_config('mysvc')
+        app = create_service_from_config(svc_cfg)
+        client = TestClient(app)
+
+        resp = client.post('/insert', json={'id': 1, 'name': 'hello'})
+        assert resp.status_code == 200, resp.text
+
+        t = pxt.get_table('table1')
+        rows = t.collect().to_pandas()
+        assert len(rows) == 1
+        assert rows['id'][0] == 1
+        assert rows['name'][0] == 'hello'
 
     def test_deploy_bundle_errors(self, uses_db: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test error paths in build_deploy_bundle()."""
