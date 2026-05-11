@@ -19,7 +19,6 @@ from .replica import (
     ReplicateRequest,
     ReplicateResponse,
 )
-
 from .service import (
     BundleRecord,
     CreateEnvironmentRequest,
@@ -47,8 +46,8 @@ from .service import (
     ListServiceRunsResponse,
     ListServicesRequest,
     ListServicesResponse,
-    ServiceRunRecord,
     ServiceRecord,
+    ServiceRunRecord,
     StartServiceRequest,
     StartServiceResponse,
     StopServiceRequest,
@@ -100,9 +99,9 @@ __all__ = [
     'ReplicateRequest',
     'ReplicateResponse',
     'RequestBaseModel',
-    'ServiceRunRecord',
     'ServiceOperationType',
     'ServiceRecord',
+    'ServiceRunRecord',
     'StartServiceRequest',
     'StartServiceResponse',
     'StopServiceRequest',

@@ -18,8 +18,8 @@ from uuid import UUID
 from pixeltable.catalog.globals import IfExistsParam
 from pixeltable.catalog.path import Path as PxtPath
 from pixeltable.catalog.table_version import TableVersion, TableVersionKey, TableVersionMd
-from pixeltable.runtime import get_runtime
 from pixeltable.metadata import schema
+from pixeltable.runtime import get_runtime
 
 _METADATA_PATH = Path('/app/metadata.json')
 
@@ -58,7 +58,7 @@ def _create_tables_from_md(tables_md: list[dict[str, Any]]) -> None:
 
 
 def run(service_name: str, host: str | None = None, port: int | None = None) -> None:
-    data = json.loads(_METADATA_PATH.read_text())
+    data = json.loads(_METADATA_PATH.read_text(encoding='utf-8'))
     _create_tables_from_md(data['tables_md'])
 
     args = ['pxt', 'serve', service_name]
@@ -72,7 +72,9 @@ def run(service_name: str, host: str | None = None, port: int | None = None) -> 
 if __name__ == '__main__':
     argv = sys.argv[1:]
     if not argv or argv[0].startswith('-'):
-        print('Usage: python -m pixeltable.serving.bootstrap <service_name> [--host HOST] [--port PORT]', file=sys.stderr)
+        print(
+            'Usage: python -m pixeltable.serving.bootstrap <service_name> [--host HOST] [--port PORT]', file=sys.stderr
+        )
         sys.exit(1)
     service_name = argv[0]
     host = None
@@ -80,9 +82,11 @@ if __name__ == '__main__':
     i = 1
     while i < len(argv):
         if argv[i] == '--host' and i + 1 < len(argv):
-            host = argv[i + 1]; i += 2
+            host = argv[i + 1]
+            i += 2
         elif argv[i] == '--port' and i + 1 < len(argv):
-            port = int(argv[i + 1]); i += 2
+            port = int(argv[i + 1])
+            i += 2
         else:
             i += 1
     run(service_name, host, port)

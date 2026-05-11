@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import tarfile
 import textwrap
+import uuid
 from pathlib import Path
 from uuid import UUID
 
 import pytest
+import requests
 import toml
 
 import pixeltable as pxt
@@ -18,7 +22,14 @@ from pixeltable.runtime import get_runtime
 from pixeltable.serving._config import create_service_from_config, lookup_service_config
 from pixeltable.serving.bootstrap import _create_tables_from_md
 from pixeltable.serving.deploy import build_deploy_bundle
-from tests.utils import pxt_raises, reload_catalog, skip_test_if_not_installed
+from pixeltable.share.deploy_client import deploy, service_delete
+from tests.utils import (
+    capture_console_output,
+    pxt_raises,
+    reload_catalog,
+    skip_test_if_no_pxt_credentials,
+    skip_test_if_not_installed,
+)
 
 
 class TestDeploy:
@@ -136,7 +147,8 @@ class TestDeploy:
         _ = pxt.create_table('table1', {'id': pxt.Int, 'name': pxt.String})
 
         config_path = tmp_path / 'pixeltable.toml'
-        config_path.write_text(textwrap.dedent("""\
+        config_path.write_text(
+            textwrap.dedent("""\
             [[environment]]
             name = "test-serve"
             services = ["mysvc"]
@@ -148,15 +160,15 @@ class TestDeploy:
             type = "insert"
             table = "table1"
             path = "/insert"
-            """))
+            """)
+        )
         monkeypatch.chdir(tmp_path)
         Config.init({}, reinit=True)
 
         bundle_path = build_deploy_bundle('test-serve')
 
-        with tarfile.open(bundle_path, 'r:bz2') as tar:
-            with tar.extractfile(tar.getmember('metadata.json')) as f:
-                tables_md = json.loads(f.read().decode('utf-8'))['tables_md']
+        with tarfile.open(bundle_path, 'r:bz2') as tar, tar.extractfile(tar.getmember('metadata.json')) as f:
+            tables_md = json.loads(f.read().decode('utf-8'))['tables_md']
 
         # Simulate container bootstrap: drop the original table, recreate from metadata.
         pxt.drop_table('table1')
@@ -164,9 +176,8 @@ class TestDeploy:
         reload_catalog()
 
         # pxt serve: build the FastAPI app from the config bundled with the deploy.
-        with tarfile.open(bundle_path, 'r:bz2') as tar:
-            with tar.extractfile(tar.getmember('config.toml')) as f:
-                (tmp_path / 'pixeltable.toml').write_bytes(f.read())
+        with tarfile.open(bundle_path, 'r:bz2') as tar, tar.extractfile(tar.getmember('config.toml')) as f:
+            (tmp_path / 'pixeltable.toml').write_bytes(f.read())
         Config.init({}, reinit=True)
 
         svc_cfg = lookup_service_config('mysvc')
@@ -250,3 +261,110 @@ class TestDeploy:
         Config.init({}, reinit=True)
         with pxt_raises(excs.ErrorCode.PATH_NOT_FOUND, match='no_such_table'):
             build_deploy_bundle('my-env')
+
+
+class TestDeployCloud:
+    """End-to-end test that calls the real Pixeltable cloud API.
+
+    Skipped when PIXELTABLE_API_KEY is not set.
+    """
+
+    def test_deploy_e2e(self, uses_db: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """pxt deploy end-to-end: bundle → cloud API → CodeBuild → Northflank → RUNNING → /health 200."""
+        skip_test_if_no_pxt_credentials()
+        skip_test_if_not_installed('fastapi')
+
+        uid = uuid.uuid4().hex[:8]
+        # Use a pre-existing environment; create it once via:
+        #   PIXELTABLE_API_KEY=<key> pxt environment create pytest --org <slug> --cpus 0.5 --memory-gb 1.0 --disk-gb 20
+        env_name = os.environ.get('PXT_TEST_ENV_NAME', 'pytest')
+        org_slug = os.environ['PXT_TEST_ORG_SLUG']  # required: org_slug is mandatory for all service ops
+        svc_name = f'test-svc-{uid}'
+
+        t1 = pxt.create_table('deploy_tbl', {'text': pxt.String})
+        t1.add_computed_column(upper_text=t1.text.upper())
+        t1.add_computed_column(text_len=t1.text.len())
+
+        t2 = pxt.create_table('deploy_nums', {'value': pxt.Float})
+        t2.add_computed_column(doubled=t2.value * 2)
+        t2.add_computed_column(is_positive=t2.value > 0)
+
+        # Inject the current git branch as the pixeltable source so CodeBuild installs
+        # the dev branch rather than the latest PyPI release.
+        branch = (
+            subprocess.check_output(['git', 'branch', '--show-current'], cwd=Path(__file__).parent, text=True).strip()
+            or 'amit-pxt-deploy'
+        )
+        (tmp_path / 'pyproject.toml').write_text(
+            textwrap.dedent(f"""\
+            [project]
+            name = "test-svc"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["pixeltable"]
+
+            [tool.uv.sources]
+            pixeltable = {{ git = "https://github.com/amithadke/pixeltable.git", branch = "{branch}" }}
+            """)
+        )
+        subprocess.run(['uv', 'lock'], cwd=tmp_path, check=True)
+
+        config_path = tmp_path / 'pixeltable.toml'
+        config_path.write_text(
+            textwrap.dedent(f"""\
+            [[environment]]
+            name = "{env_name}"
+            org = "{org_slug}"
+            services = ["{svc_name}"]
+
+            [[service]]
+            name = "{svc_name}"
+
+            [[service.routes]]
+            type = "insert"
+            table = "deploy_tbl"
+            path = "/insert-text"
+            outputs = ["upper_text", "text_len"]
+
+            [[service.routes]]
+            type = "insert"
+            table = "deploy_nums"
+            path = "/insert-num"
+            outputs = ["doubled", "is_positive"]
+            """)
+        )
+        monkeypatch.chdir(tmp_path)
+        Config.init({}, reinit=True)
+
+        with capture_console_output() as out:
+            service_ids = deploy(env_name, watch=True)
+
+        output = out.getvalue()
+        assert 'is live at:' in output.lower(), f'Expected live endpoint in output:\n{output}'
+
+        endpoint = None
+        for line in output.splitlines():
+            if 'live at:' in line.lower():
+                endpoint = line.split()[-1]
+                break
+        assert endpoint is not None
+
+        try:
+            resp = requests.get(f'{endpoint}/health', timeout=10)
+            assert resp.status_code == 200, resp.text
+
+            resp = requests.post(f'{endpoint}/insert-text', json={'text': 'hello world'}, timeout=10)
+            print(f'POST /insert-text → {resp.status_code}: {resp.text}')
+            assert resp.status_code == 200, resp.text
+            assert resp.json() == {'upper_text': 'HELLO WORLD', 'text_len': 11}, resp.text
+
+            resp = requests.post(f'{endpoint}/insert-num', json={'value': 3.0}, timeout=10)
+            print(f'POST /insert-num → {resp.status_code}: {resp.text}')
+            assert resp.status_code == 200, resp.text
+            assert resp.json() == {'doubled': 6.0, 'is_positive': True}, resp.text
+        finally:
+            for sid in service_ids.values():
+                try:
+                    service_delete(sid, org_slug=org_slug)
+                except Exception:
+                    pass

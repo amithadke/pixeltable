@@ -13,8 +13,8 @@ from pydantic import BaseModel, field_validator
 
 from .operation_types import ServiceOperationType
 
-
 # ── Environment ───────────────────────────────────────────────────────────────
+
 
 class EnvironmentRecord(BaseModel):
     env_id: str
@@ -31,6 +31,7 @@ class EnvironmentRecord(BaseModel):
 
 class CreateEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.CREATE_ENVIRONMENT] = ServiceOperationType.CREATE_ENVIRONMENT
+    org_slug: Optional[str] = None
     env_name: str
     cpus: float = 0.5
     memory_gb: float = 1.0
@@ -51,6 +52,7 @@ class CreateEnvironmentResponse(BaseModel):
 
 class GetEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.GET_ENVIRONMENT] = ServiceOperationType.GET_ENVIRONMENT
+    org_slug: Optional[str] = None
     env_id: str
 
 
@@ -60,6 +62,7 @@ class GetEnvironmentResponse(BaseModel):
 
 class ListEnvironmentsRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.LIST_ENVIRONMENTS] = ServiceOperationType.LIST_ENVIRONMENTS
+    org_slug: Optional[str] = None
 
 
 class ListEnvironmentsResponse(BaseModel):
@@ -68,6 +71,7 @@ class ListEnvironmentsResponse(BaseModel):
 
 class UpdateEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.UPDATE_ENVIRONMENT] = ServiceOperationType.UPDATE_ENVIRONMENT
+    org_slug: Optional[str] = None
     env_id: str
     env_name: Optional[str] = None
     cpus: Optional[float] = None
@@ -89,6 +93,7 @@ class UpdateEnvironmentResponse(BaseModel):
 
 class DeleteEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.DELETE_ENVIRONMENT] = ServiceOperationType.DELETE_ENVIRONMENT
+    org_slug: Optional[str] = None
     env_id: str
 
 
@@ -97,6 +102,7 @@ class DeleteEnvironmentResponse(BaseModel):
 
 
 # ── Run (shared record, referenced by ServiceRecord) ─────────────────────────
+
 
 class ServiceRunRecord(BaseModel):
     run_id: str
@@ -116,6 +122,7 @@ class ServiceRunRecord(BaseModel):
 
 # ── Service ───────────────────────────────────────────────────────────────────
 
+
 class ServiceRecord(BaseModel):
     service_id: str
     env_id: str
@@ -132,6 +139,7 @@ class ServiceRecord(BaseModel):
 
 class CreateServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.CREATE_SERVICE] = ServiceOperationType.CREATE_SERVICE
+    org_slug: Optional[str] = None
     env_id: str
     service_name: str
     workers_min: int = 1
@@ -146,6 +154,7 @@ class CreateServiceResponse(BaseModel):
 
 class GetServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.GET_SERVICE] = ServiceOperationType.GET_SERVICE
+    org_slug: Optional[str] = None
     service_id: str
 
 
@@ -155,6 +164,7 @@ class GetServiceResponse(BaseModel):
 
 class ListServicesRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.LIST_SERVICES] = ServiceOperationType.LIST_SERVICES
+    org_slug: Optional[str] = None
     env_id: str
 
 
@@ -164,6 +174,7 @@ class ListServicesResponse(BaseModel):
 
 class StopServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.STOP_SERVICE] = ServiceOperationType.STOP_SERVICE
+    org_slug: Optional[str] = None
     service_id: str
 
 
@@ -173,6 +184,7 @@ class StopServiceResponse(BaseModel):
 
 class StartServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.START_SERVICE] = ServiceOperationType.START_SERVICE
+    org_slug: Optional[str] = None
     service_id: str
 
 
@@ -182,6 +194,7 @@ class StartServiceResponse(BaseModel):
 
 class DeleteServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.DELETE_SERVICE] = ServiceOperationType.DELETE_SERVICE
+    org_slug: Optional[str] = None
     service_id: str
 
 
@@ -191,8 +204,10 @@ class DeleteServiceResponse(BaseModel):
 
 # ── Deploy (two-step: request presigned URL, then finalize) ──────────────────
 
+
 class DeployRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.DEPLOY_REQUEST] = ServiceOperationType.DEPLOY_REQUEST
+    org_slug: Optional[str] = None
     env_name: str
     service_name: str
     bundle_size_bytes: int
@@ -206,6 +221,7 @@ class DeployRequestResponse(BaseModel):
 
 class FinalizeDeployRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.FINALIZE_DEPLOY] = ServiceOperationType.FINALIZE_DEPLOY
+    org_slug: Optional[str] = None
     upload_id: str
 
 
@@ -213,10 +229,10 @@ class BundleRecord(BaseModel):
     bundle_id: str
     org_id: str
     bundle_hash: str
-    routes: list[str]                        # HTTP paths exposed (e.g. ["/insert", "/documents"])
-    route_to_table: dict[str, list[str]]     # HTTP path → [table_path, ...]
-    table_metadata: dict[str, Any]           # table_path → TableMetadata
-    tables_md: list[dict[str, Any]]          # list of TableVersionMd dicts; restore via TableVersionMd.from_dict()
+    routes: list[str]  # HTTP paths exposed (e.g. ["/insert", "/documents"])
+    route_to_table: dict[str, list[str]]  # HTTP path → [table_path, ...]
+    table_metadata: dict[str, Any]  # table_path → TableMetadata
+    tables_md: list[dict[str, Any]]  # list of TableVersionMd dicts
     pxt_version: str
     pxt_md_version: int
     file_manifest: list[str]
@@ -229,19 +245,33 @@ class FinalizeDeployResponse(BaseModel):
     run: ServiceRunRecord
 
 
-# ── Service run history (read-only) ──────────────────────────────────────────
+# ── Service run history ───────────────────────────────────────────────────────
+
+
+class RouteTableRecord(BaseModel):
+    table_path: str
+    metadata: dict[str, Any]
+
+
+class RouteRecord(BaseModel):
+    path: str
+    tables: list[RouteTableRecord]
+
 
 class GetServiceRunRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.GET_SERVICE_RUN] = ServiceOperationType.GET_SERVICE_RUN
+    org_slug: Optional[str] = None
     run_id: str
 
 
 class GetServiceRunResponse(BaseModel):
     run: ServiceRunRecord
+    routes: list[RouteRecord]
 
 
 class ListServiceRunsRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.LIST_SERVICE_RUNS] = ServiceOperationType.LIST_SERVICE_RUNS
+    org_slug: Optional[str] = None
     service_id: str
 
 
