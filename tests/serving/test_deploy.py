@@ -6,6 +6,7 @@ import json
 import tarfile
 import textwrap
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 import toml
@@ -13,8 +14,10 @@ import toml
 import pixeltable as pxt
 from pixeltable import exceptions as excs, metadata
 from pixeltable.config import Config
+from pixeltable.runtime import get_runtime
+from pixeltable.serving.bootstrap import _create_tables_from_md
 from pixeltable.serving.deploy import build_deploy_bundle
-from tests.utils import pxt_raises
+from tests.utils import pxt_raises, reload_catalog
 
 
 class TestDeploy:
@@ -95,13 +98,34 @@ class TestDeploy:
                 assert content['pxt_version'] == pxt.__version__
                 assert content['pxt_md_version'] == metadata.VERSION
                 assert len(content['tables_md']) == 2  # 2 tables referenced in services
-                assert len(content['tables_md'][0]) == 3  # TableVersionMd structure
+                assert len(content['tables_md'][0]) == 4  # TableVersionMd + _path
 
             # Verify the contents of conda-env.yml
             env_member = tar.getmember('conda-env.yml')
             with tar.extractfile(env_member) as f:
                 text = f.read().decode('utf-8')
                 assert 'pixeltable==' in text, text
+
+            with tar.extractfile(tar.getmember('metadata.json')) as f:
+                tables_md = json.loads(f.read().decode('utf-8'))['tables_md']
+
+        # Drop the tables and recreate from the exported metadata to verify round-trip.
+        pxt.drop_table('table1')
+        pxt.drop_table('table2')
+        _create_tables_from_md(tables_md)
+        reload_catalog()  # sync in-memory state after direct metadata write
+
+        t1 = pxt.get_table('table1')
+        assert set(t1.columns()) == {'id', 'name'}
+
+        t2 = pxt.get_table('table2')
+        assert set(t2.columns()) == {'id', 'value'}
+
+        catalog = get_runtime().catalog
+        for record in tables_md:
+            tbl_id = UUID(record['tbl_md']['tbl_id'])
+            with catalog.begin_xact(for_write=False):
+                assert catalog.get_table_by_id(tbl_id) is not None, f'table {tbl_id} not found by UUID'
 
     def test_deploy_bundle_errors(self, uses_db: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test error paths in build_deploy_bundle()."""

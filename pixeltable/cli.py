@@ -6,13 +6,13 @@ import argparse
 import errno
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 import pydantic
 
 import pixeltable as pxt
 from pixeltable import config, exceptions as excs
-from pixeltable.serving import deploy
 from pixeltable.serving._config import create_service_from_config, lookup_service_config
 
 
@@ -86,12 +86,42 @@ def main() -> None:
 
     deploy_parser = subparsers.add_parser(
         'deploy',
-        help='Deploy the services in the specified environment to Pixeltable cloud.',
+        help='Build and upload a deploy bundle for the given environment',
         epilog=_EPILOG_DEPLOY,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     deploy_parser.add_argument('env', help='Name of the target environment')
     deploy_parser.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    env_parser = subparsers.add_parser(
+        'environment',
+        help='Manage cloud deployment environments',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    env_sub = env_parser.add_subparsers(dest='env_command', required=True)
+
+    env_create = env_sub.add_parser('create', help='Create a new environment')
+    env_create.add_argument('name', help='Environment name')
+    env_create.add_argument('--cpus', type=float, default=0.5, help='vCPUs per replica (default: 0.5)')
+    env_create.add_argument('--memory-gb', type=float, default=1.0, dest='memory_gb', help='Memory in GB (default: 1.0)')
+    env_create.add_argument('--disk-gb', type=float, default=50.0, dest='disk_gb', help='Disk in GB (default: 50.0)')
+    env_create.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    env_list = env_sub.add_parser('list', help='List environments')
+    env_list.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    env_update = env_sub.add_parser('update', help='Update an environment')
+    env_update.add_argument('name', help='Environment name')
+    env_update.add_argument('--set-name', dest='new_name', default=None, help='Rename the environment')
+    env_update.add_argument('--cpus', type=float, default=None, help='New vCPUs per replica')
+    env_update.add_argument('--memory-gb', type=float, default=None, dest='memory_gb', help='New memory in GB')
+    env_update.add_argument('--disk-gb', type=float, default=None, dest='disk_gb', help='New disk in GB')
+    env_update.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    env_delete = env_sub.add_parser('delete', help='Delete an environment')
+    env_delete.add_argument('name', help='Environment name')
+    env_delete.add_argument('-y', '--yes', action='store_true', dest='yes', help='Skip confirmation prompt')
+    env_delete.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     args = parser.parse_args()
 
@@ -104,6 +134,8 @@ def main() -> None:
             _serve(args)
         elif args.command == 'deploy':
             _deploy(args)
+        elif args.command == 'environment':
+            _environment(args)
     except pxt.Error as e:
         _emit_error(str(e), args.json)
         sys.exit(1)
@@ -270,7 +302,28 @@ def _add_serve_subparsers(serve_parser: argparse.ArgumentParser) -> None:
 
 
 def _deploy(args: argparse.Namespace) -> None:
-    deploy.build_deploy_bundle(args.env)
+    from pixeltable.serving.deploy import deploy as cloud_deploy
+    cloud_deploy(args.env, json_output=args.json)
+
+
+def _environment(args: argparse.Namespace) -> None:
+    from pixeltable.share import deploy_client
+    cmd = args.env_command
+    if cmd == 'create':
+        deploy_client.environment_create(args.name, args.cpus, args.memory_gb, args.disk_gb, args.json)
+    elif cmd == 'list':
+        deploy_client.environment_list(args.json)
+    elif cmd == 'update':
+        deploy_client.environment_update(args.name, args.new_name, args.cpus, args.memory_gb, args.disk_gb, args.json)
+    elif cmd == 'delete':
+        if not args.yes:
+            confirm = input(f"Delete environment '{args.name}'? This cannot be undone. [y/N] ").strip().lower()
+            if confirm not in ('y', 'yes'):
+                print('Aborted.')
+                return
+        deploy_client.environment_delete(args.name, args.json)
+    else:
+        raise AssertionError(f'unknown environment subcommand: {cmd}')
 
 
 def _serve(args: argparse.Namespace) -> None:
