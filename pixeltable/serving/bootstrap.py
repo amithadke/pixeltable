@@ -27,24 +27,25 @@ _METADATA_PATH = Path('/app/metadata.json')
 def _create_tables_from_md(tables_md: list[dict[str, Any]]) -> None:
     catalog = get_runtime().catalog
 
-    with catalog.begin_xact(for_write=True):
-        for record in tables_md:
-            path_str = record.get('_path')
-            assert path_str, f'table record missing _path: {record}'
+    for record in tables_md:
+        path_str = record.get('_path')
+        assert path_str, f'table record missing _path: {record}'
 
-            md = schema.md_from_dict(TableVersionMd, {k: v for k, v in record.items() if k != '_path'})
-            tbl_id = UUID(md.tbl_md.tbl_id)
+        md = schema.md_from_dict(TableVersionMd, {k: v for k, v in record.items() if k != '_path'})
+        tbl_id = UUID(md.tbl_md.tbl_id)
 
+        pxt_path = PxtPath.parse(path_str)
+        parent_path = pxt_path.parent
+
+        # create_dir asserts no active transaction; call it before opening one
+        if not parent_path.is_root:
+            catalog.create_dir(parent_path, if_exists=IfExistsParam.IGNORE, parents=True)
+
+        with catalog.begin_xact(for_write=True):
             if catalog.get_table_by_id(tbl_id) is not None:
-                continue  # idempotent check
+                continue  # idempotent
 
-            pxt_path = PxtPath.parse(path_str)
-            parent_path = pxt_path.parent
-
-            if parent_path.is_root:
-                dir_id = catalog._get_dir(parent_path).id
-            else:
-                dir_id = catalog.create_dir(parent_path, if_exists=IfExistsParam.IGNORE, parents=True)._id
+            dir_id = catalog._get_dir(parent_path).id
 
             catalog.write_tbl_md(tbl_id, dir_id, md.tbl_md, md.version_md, md.schema_version_md)
 
