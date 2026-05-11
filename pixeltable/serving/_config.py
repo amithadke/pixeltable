@@ -142,8 +142,8 @@ def create_service_from_config(cfg: config.ServiceConfig) -> 'fastapi.FastAPI':
 
     app.include_router(router, prefix=cfg.prefix)
 
-    @app.get('/health/ready', include_in_schema=False)
-    def health_ready() -> dict:
+    @app.get('/health', include_in_schema=False)
+    def health() -> dict:
         return {'status': 'ok'}
 
     return app
