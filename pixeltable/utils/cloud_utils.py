@@ -17,7 +17,8 @@ from pixeltable.config import Config
 from pixeltable.env import Env
 from pixeltable.share.protocol.bucket import GetBucketCredentialsRequest, GetBucketCredentialsResponse
 from pixeltable.share.protocol.presigned_url import GetPresignedUrlRequest, GetPresignedUrlResponse
-from pixeltable.share.publish import PIXELTABLE_API_URL
+
+PIXELTABLE_API_URL = os.environ.get('PIXELTABLE_API_URL', 'https://internal-api.pixeltable.com')
 
 
 def _api_headers() -> dict[str, str]:
