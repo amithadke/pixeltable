@@ -28,3 +28,29 @@ class PixeltableStoreOperationType(str, Enum):
 
 REPLICA_OPERATIONS = frozenset(ReplicaOperationType)
 PIXELTABLE_STORE_OPERATIONS = frozenset(PixeltableStoreOperationType)
+
+
+class ServiceOperationType(str, Enum):
+    """Operation types for pxt service deployment (environment, service, deploy, run)."""
+
+    CREATE_ENVIRONMENT = 'create_environment'
+    GET_ENVIRONMENT = 'get_environment'
+    LIST_ENVIRONMENTS = 'list_environments'
+    UPDATE_ENVIRONMENT = 'update_environment'
+    DELETE_ENVIRONMENT = 'delete_environment'
+
+    CREATE_SERVICE = 'create_service'
+    GET_SERVICE = 'get_service'
+    LIST_SERVICES = 'list_services'
+    STOP_SERVICE = 'stop_service'
+    START_SERVICE = 'start_service'
+    DELETE_SERVICE = 'delete_service'
+
+    DEPLOY_REQUEST = 'deploy_request'
+    FINALIZE_DEPLOY = 'finalize_deploy'
+
+    GET_SERVICE_RUN = 'get_service_run'
+    LIST_SERVICE_RUNS = 'list_service_runs'
+
+
+SERVICE_OPERATIONS = frozenset(ServiceOperationType)

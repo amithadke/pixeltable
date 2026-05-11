@@ -8,7 +8,6 @@ The Dockerfile CMD should be:
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import os
 import sys
@@ -37,7 +36,7 @@ def _create_tables_from_md(tables_md: list[dict[str, Any]]) -> None:
             tbl_id = UUID(md.tbl_md.tbl_id)
 
             if catalog.get_table_by_id(tbl_id) is not None:
-                continue  # idempotent
+                continue  # idempotent check
 
             pxt_path = PxtPath.parse(path_str)
             parent_path = pxt_path.parent
@@ -47,11 +46,10 @@ def _create_tables_from_md(tables_md: list[dict[str, Any]]) -> None:
             else:
                 dir_id = catalog.create_dir(parent_path, if_exists=IfExistsParam.IGNORE, parents=True)._id
 
-            tbl_md = dataclasses.replace(md.tbl_md, is_replica=False)
-            catalog.write_tbl_md(tbl_id, dir_id, tbl_md, md.version_md, md.schema_version_md)
+            catalog.write_tbl_md(tbl_id, dir_id, md.tbl_md, md.version_md, md.schema_version_md)
 
             key = TableVersionKey(tbl_id, md.version_md.version, None)
-            tbl_version = TableVersion(key, tbl_md, md.version_md, md.schema_version_md, [])
+            tbl_version = TableVersion(key, md.tbl_md, md.version_md, md.schema_version_md, [])
             catalog._tbl_versions[key] = tbl_version
             with catalog._allow_tbl_md_read():
                 tbl_version.init()

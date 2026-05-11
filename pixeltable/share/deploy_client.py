@@ -11,6 +11,14 @@ from pixeltable import exceptions as excs
 from pixeltable.env import Env
 from pixeltable.serving._config import lookup_environment_config
 from pixeltable.serving.deploy import build_deploy_bundle
+from pixeltable.share.protocol.service import (
+    CreateEnvironmentRequest,
+    DeleteEnvironmentRequest,
+    DeployRequest,
+    FinalizeDeployRequest,
+    ListEnvironmentsRequest,
+    UpdateEnvironmentRequest,
+)
 from pixeltable.share.publish import PIXELTABLE_API_URL, _api_headers, _upload_to_presigned_url
 
 
@@ -20,21 +28,17 @@ def deploy(environment_name: str, json_output: bool = False) -> None:
     bundle_path = build_deploy_bundle(environment_name)
 
     for service_name in cfg.services:
-        deploy_resp = _post({
-            'operation_type': 'DEPLOY_REQUEST',
-            'env_name': cfg.name,
-            'service_name': service_name,
-            'bundle_size_bytes': bundle_path.stat().st_size,
-        })
+        deploy_resp = _post(DeployRequest(
+            env_name=cfg.name,
+            service_name=service_name,
+            bundle_size_bytes=bundle_path.stat().st_size,
+        ))
         upload_id = deploy_resp['upload_id']
         upload_url = deploy_resp['upload_url']
 
         _upload_to_presigned_url(bundle_path, upload_url)
 
-        finalize_resp = _post({
-            'operation_type': 'FINALIZE_DEPLOY',
-            'upload_id': upload_id,
-        })
+        finalize_resp = _post(FinalizeDeployRequest(upload_id=upload_id))
         run = finalize_resp['run']
 
         if json_output:
@@ -59,13 +63,7 @@ def environment_create(
     disk_gb: float,
     json_output: bool = False,
 ) -> None:
-    resp = _post({
-        'operation_type': 'CREATE_ENVIRONMENT',
-        'env_name': env_name,
-        'cpus': cpus,
-        'memory_gb': memory_gb,
-        'disk_gb': disk_gb,
-    })
+    resp = _post(CreateEnvironmentRequest(env_name=env_name, cpus=cpus, memory_gb=memory_gb, disk_gb=disk_gb))
     env = resp['environment']
     if json_output:
         print(json.dumps(env))
@@ -74,7 +72,7 @@ def environment_create(
 
 
 def environment_list(json_output: bool = False) -> None:
-    resp = _post({'operation_type': 'LIST_ENVIRONMENTS'})
+    resp = _post(ListEnvironmentsRequest())
     envs = resp.get('environments', [])
     if json_output:
         print(json.dumps(envs))
@@ -95,16 +93,13 @@ def environment_update(
     json_output: bool = False,
 ) -> None:
     env = _find_env_by_name(env_name)
-    body: dict[str, Any] = {'operation_type': 'UPDATE_ENVIRONMENT', 'env_id': env['env_id']}
-    if new_name is not None:
-        body['env_name'] = new_name
-    if cpus is not None:
-        body['cpus'] = cpus
-    if memory_gb is not None:
-        body['memory_gb'] = memory_gb
-    if disk_gb is not None:
-        body['disk_gb'] = disk_gb
-    resp = _post(body)
+    resp = _post(UpdateEnvironmentRequest(
+        env_id=env['env_id'],
+        env_name=new_name,
+        cpus=cpus,
+        memory_gb=memory_gb,
+        disk_gb=disk_gb,
+    ))
     updated_env = resp['environment']
     if json_output:
         print(json.dumps(updated_env))
@@ -114,7 +109,7 @@ def environment_update(
 
 def environment_delete(env_name: str, json_output: bool = False) -> None:
     env = _find_env_by_name(env_name)
-    _post({'operation_type': 'DELETE_ENVIRONMENT', 'env_id': env['env_id']})
+    _post(DeleteEnvironmentRequest(env_id=env['env_id']))
     if json_output:
         print(json.dumps({'deleted': env_name}))
     else:
@@ -122,15 +117,16 @@ def environment_delete(env_name: str, json_output: bool = False) -> None:
 
 
 def _find_env_by_name(env_name: str) -> dict[str, Any]:
-    resp = _post({'operation_type': 'LIST_ENVIRONMENTS'})
+    resp = _post(ListEnvironmentsRequest())
     for env in resp.get('environments', []):
         if env['env_name'] == env_name:
             return env
     raise excs.NotFoundError(excs.ErrorCode.SERVICE_NOT_FOUND, f"Environment '{env_name}' not found")
 
 
-def _post(body: dict[str, Any]) -> dict[str, Any]:
-    resp = requests.post(PIXELTABLE_API_URL, data=json.dumps(body), headers=_api_headers())
+def _post(request: Any) -> dict[str, Any]:
+    body = request.model_dump_json()
+    resp = requests.post(PIXELTABLE_API_URL, data=body, headers=_api_headers())
     if resp.status_code != 200:
         raise excs.ExternalServiceError(
             excs.ErrorCode.PROVIDER_ERROR,
