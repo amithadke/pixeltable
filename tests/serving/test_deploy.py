@@ -314,7 +314,6 @@ class TestDeployCloud:
             textwrap.dedent(f"""\
             [[environment]]
             name = "{env_name}"
-            org = "{org_slug}"
             services = ["{svc_name}"]
 
             [[service]]
@@ -337,7 +336,7 @@ class TestDeployCloud:
         Config.init({}, reinit=True)
 
         with capture_console_output() as out:
-            service_ids = deploy(env_name, watch=True)
+            service_ids = deploy(env_name, watch=True, org_slug=org_slug)
 
         output = out.getvalue()
         assert 'is live at:' in output.lower(), f'Expected live endpoint in output:\n{output}'
