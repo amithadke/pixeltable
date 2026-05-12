@@ -100,7 +100,7 @@ def main() -> None:
 
     env_create = env_sub.add_parser('create', help='Create a new environment')
     env_create.add_argument('name', help='Environment name')
-    env_create.add_argument('--org', default=None, dest='org', help='Organization slug')
+    env_create.add_argument('--org', required=True, dest='org', help='Organization slug')
     env_create.add_argument('--cpus', type=float, default=0.5, help='vCPUs per replica (default: 0.5)')
     env_create.add_argument(
         '--memory-gb', type=float, default=1.0, dest='memory_gb', help='Memory in GB (default: 1.0)'
@@ -109,12 +109,12 @@ def main() -> None:
     env_create.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     env_list = env_sub.add_parser('list', help='List environments')
-    env_list.add_argument('--org', default=None, dest='org', help='Organization slug')
+    env_list.add_argument('--org', required=True, dest='org', help='Organization slug')
     env_list.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     env_update = env_sub.add_parser('update', help='Update an environment')
     env_update.add_argument('name', help='Environment name')
-    env_update.add_argument('--org', default=None, dest='org', help='Organization slug')
+    env_update.add_argument('--org', required=True, dest='org', help='Organization slug')
     env_update.add_argument('--set-name', dest='new_name', default=None, help='Rename the environment')
     env_update.add_argument('--cpus', type=float, default=None, help='New vCPUs per replica')
     env_update.add_argument('--memory-gb', type=float, default=None, dest='memory_gb', help='New memory in GB')
@@ -123,7 +123,7 @@ def main() -> None:
 
     env_delete = env_sub.add_parser('delete', help='Delete an environment')
     env_delete.add_argument('name', help='Environment name')
-    env_delete.add_argument('--org', default=None, dest='org', help='Organization slug')
+    env_delete.add_argument('--org', required=True, dest='org', help='Organization slug')
     env_delete.add_argument('-y', '--yes', action='store_true', dest='yes', help='Skip confirmation prompt')
     env_delete.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
