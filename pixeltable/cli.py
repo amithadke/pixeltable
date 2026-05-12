@@ -306,21 +306,15 @@ def _add_serve_subparsers(serve_parser: argparse.ArgumentParser) -> None:
 
 
 def _deploy(args: argparse.Namespace) -> None:
-    from pixeltable.serving._config import lookup_environment_config
     from pixeltable.share.deploy_client import deploy as cloud_deploy
 
-    cfg = lookup_environment_config(args.env)
-    # CLI --org overrides the org field in pixeltable.toml
-    org_slug = args.org or cfg.org
-    # Validate that every service has an org: either qualified as "org/svc", or a default org is set
-    unqualified_without_org = [s for s in cfg.services if '/' not in s and org_slug is None]
-    if unqualified_without_org:
-        raise excs.RequestError(
-            excs.ErrorCode.INVALID_ARGUMENT,
-            f'Services {unqualified_without_org} need an org. Use --org <slug>, set org in pixeltable.toml,'
-            ' or qualify service names as "org_slug/service_name".',
-        )
-    cloud_deploy(args.env, json_output=args.json, org_slug=org_slug)
+    env_arg = args.env
+    if '/' in env_arg:
+        org_slug, environment_name = env_arg.split('/', 1)
+    else:
+        org_slug = args.org
+        environment_name = env_arg
+    cloud_deploy(environment_name, json_output=args.json, org_slug=org_slug)
 
 
 def _environment(args: argparse.Namespace) -> None:

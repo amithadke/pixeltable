@@ -131,7 +131,6 @@ class EnvironmentConfig(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra='forbid')
 
     name: str
-    org: str | None = None  # org_slug of the deployment target; required for multi-org users
     include: list[str] | None = None
     exclude: list[str] | None = None
     env_dependencies: list[str] = pydantic.Field(default_factory=list)

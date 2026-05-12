@@ -33,7 +33,6 @@ def deploy(
     Returns a mapping of service_name → service_id for all deployed services.
     """
     cfg = lookup_environment_config(environment_name)
-    default_org_slug = org_slug or cfg.org
     bundle_path = build_deploy_bundle(environment_name)
     service_ids: dict[str, str] = {}
 
@@ -42,7 +41,7 @@ def deploy(
         if '/' in service_name_raw:
             svc_org_slug, service_name = service_name_raw.split('/', 1)
         else:
-            svc_org_slug = default_org_slug
+            svc_org_slug = org_slug
             service_name = service_name_raw
 
         deploy_resp = _post(
