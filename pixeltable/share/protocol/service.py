@@ -116,6 +116,7 @@ class ServiceRunRecord(BaseModel):
     version: str
     state: str  # PENDING | BUILDING | DEPLOYING | STARTING | RUNNING | STOPPED | FAILED
     endpoint: Optional[str]
+    public_endpoint: Optional[str] = None
     error: Optional[str]
     started_at: float
 

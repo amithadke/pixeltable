@@ -107,7 +107,7 @@ def _poll_until_running(
                 else:
                     Env.get().console_logger.info(f'  deployment state: {state}')
             if state == 'RUNNING':
-                return current_run.get('endpoint')
+                return current_run.get('public_endpoint') or current_run.get('endpoint')
             if state == 'FAILED':
                 error = current_run.get('error') or 'unknown error'
                 raise excs.ExternalServiceError(

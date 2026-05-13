@@ -1595,6 +1595,36 @@ class TestFastAPI:
         result = await_background_job(client, job, require_pending=False)['result']
         assert result == {'doubled': 14}
 
+    def test_insert_route_background_job_id_url_prefix(self, uses_db: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When JOB_ID_URL_PREFIX is set, job_url uses it instead of url_for."""
+        skip_test_if_not_installed('fastapi')
+        import pydantic
+
+        from pixeltable.serving import FastAPIRouter
+
+        pxt.create_dir('test_serve')
+        t = pxt.create_table('test_serve.bg_prefix', {'id': pxt.Int, 'value': pxt.Int})
+
+        router = FastAPIRouter()
+
+        class BgResp(pydantic.BaseModel):
+            doubled: int
+
+        @router.insert_route(t, path='/bg', outputs=['value'], background=True)
+        def make_resp(*, value: int | None) -> BgResp:
+            assert value is not None
+            return BgResp(doubled=value * 2)
+
+        prefix = 'https://pxt.run/myorg/prod/my-svc/jobs/base64podname'
+        monkeypatch.setenv('JOB_ID_URL_PREFIX', prefix)
+        client = make_test_client(router)
+
+        resp = client.post('/bg', json={'id': 1, 'value': 5})
+        assert resp.status_code == 200, resp.text
+        job = resp.json()
+        assert job['job_url'].startswith(prefix + '/'), f'Expected prefix in job_url: {job["job_url"]}'
+        assert job['id'] in job['job_url']
+
     def test_insert_route_errors(self, uses_db: None) -> None:
         skip_test_if_not_installed('fastapi')
         import pydantic

@@ -1345,9 +1345,13 @@ class FastAPIRouter(fastapi.APIRouter):
                 fut = self._executor.submit(_run_endpoint_op, endpoint_op, kwargs, tmp_paths, url_for_media)
                 with self._jobs_lock:
                     self._jobs[job_id] = fut
-                return BackgroundJobResponse(
-                    id=job_id, job_url=str(request.url_for(_JOB_STATUS_ROUTE_NAME, job_id=job_id))
-                )
+                base = os.environ.get('JOB_ID_URL_PREFIX', '')
+                if base:
+                    pod = os.environ.get('HOSTNAME', '')
+                    job_url = f'{base}/{pod}/{job_id}' if pod else f'{base}/{job_id}'
+                else:
+                    job_url = str(request.url_for(_JOB_STATUS_ROUTE_NAME, job_id=job_id))
+                return BackgroundJobResponse(id=job_id, job_url=job_url)
             else:
                 return _run_endpoint_op(endpoint_op, kwargs, tmp_paths, url_for_media)
 
