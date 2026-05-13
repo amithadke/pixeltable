@@ -52,5 +52,9 @@ class ServiceOperationType(str, Enum):
     GET_SERVICE_RUN = 'get_service_run'
     LIST_SERVICE_RUNS = 'list_service_runs'
 
+    ADD_ENV_SECRET = 'add_env_secret'
+    REMOVE_ENV_SECRET = 'remove_env_secret'
+    LIST_ENV_SECRETS = 'list_env_secrets'
+
 
 SERVICE_OPERATIONS = frozenset(ServiceOperationType)

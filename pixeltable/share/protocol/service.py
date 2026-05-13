@@ -101,6 +101,45 @@ class DeleteEnvironmentResponse(BaseModel):
     env_id: str
 
 
+# ── Environment secrets ───────────────────────────────────────────────────────
+
+
+class AddEnvSecretRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.ADD_ENV_SECRET] = ServiceOperationType.ADD_ENV_SECRET
+    org_slug: Optional[str] = None
+    env_id: str
+    secret_name: str
+    secret_value: str
+
+
+class AddEnvSecretResponse(BaseModel):
+    env_id: str
+    secret_name: str
+
+
+class RemoveEnvSecretRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.REMOVE_ENV_SECRET] = ServiceOperationType.REMOVE_ENV_SECRET
+    org_slug: Optional[str] = None
+    env_id: str
+    secret_name: str
+
+
+class RemoveEnvSecretResponse(BaseModel):
+    env_id: str
+    secret_name: str
+
+
+class ListEnvSecretsRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.LIST_ENV_SECRETS] = ServiceOperationType.LIST_ENV_SECRETS
+    org_slug: Optional[str] = None
+    env_id: str
+
+
+class ListEnvSecretsResponse(BaseModel):
+    env_id: str
+    secret_names: list[str]
+
+
 # ── Run (shared record, referenced by ServiceRecord) ─────────────────────────
 
 

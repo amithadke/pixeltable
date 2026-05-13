@@ -7,6 +7,7 @@ import os
 import subprocess
 import tarfile
 import textwrap
+import time
 import uuid
 from pathlib import Path
 from uuid import UUID
@@ -16,6 +17,7 @@ import requests
 import toml
 
 import pixeltable as pxt
+import pixeltable.functions as pxtf
 from pixeltable import exceptions as excs, metadata
 from pixeltable.config import Config
 from pixeltable.runtime import get_runtime
@@ -289,6 +291,9 @@ class TestDeployCloud:
         t2.add_computed_column(doubled=t2.value * 2)
         t2.add_computed_column(is_positive=t2.value > 0)
 
+        t3 = pxt.create_table('deploy_imgs', {'image': pxt.Image})
+        t3.add_computed_column(rotated=t3.image.rotate(angle=90))
+
         # Inject the current git branch as the pixeltable source so CodeBuild installs
         # the dev branch rather than the latest PyPI release.
         branch = (
@@ -330,6 +335,15 @@ class TestDeployCloud:
             table = "deploy_nums"
             path = "/insert-num"
             outputs = ["doubled", "is_positive"]
+            background = true
+
+            [[service.routes]]
+            type = "insert"
+            table = "deploy_imgs"
+            path = "/insert-image"
+            uploadfile_inputs = ["image"]
+            outputs = ["rotated"]
+            background = true
             """)
         )
         monkeypatch.chdir(tmp_path)
@@ -348,19 +362,76 @@ class TestDeployCloud:
                 break
         assert endpoint is not None
 
+        api_key = os.environ['PIXELTABLE_API_KEY']
+        auth_headers = {'X-api-key': api_key}
+
         try:
             resp = requests.get(f'{endpoint}/health', timeout=10)
             assert resp.status_code == 200, resp.text
 
-            resp = requests.post(f'{endpoint}/insert-text', json={'text': 'hello world'}, timeout=10)
+            resp = requests.post(f'{endpoint}/insert-text', json={'text': 'hello world'}, headers=auth_headers, timeout=10)
             print(f'POST /insert-text → {resp.status_code}: {resp.text}')
             assert resp.status_code == 200, resp.text
             assert resp.json() == {'upper_text': 'HELLO WORLD', 'text_len': 11}, resp.text
 
-            resp = requests.post(f'{endpoint}/insert-num', json={'value': 3.0}, timeout=10)
+            resp = requests.post(f'{endpoint}/insert-num', json={'value': 3.0}, headers=auth_headers, timeout=10)
             print(f'POST /insert-num → {resp.status_code}: {resp.text}')
             assert resp.status_code == 200, resp.text
-            assert resp.json() == {'doubled': 6.0, 'is_positive': True}, resp.text
+            job = resp.json()
+            assert 'job_url' in job, f'Expected BackgroundJobResponse, got: {job}'
+            job_url = job['job_url']
+            result = None
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                poll = requests.get(job_url, headers=auth_headers, timeout=10)
+                assert poll.status_code == 200, poll.text
+                body = poll.json()
+                if body['status'] == 'done':
+                    result = body['result']
+                    break
+                if body['status'] == 'error':
+                    raise AssertionError(f'/insert-num job failed: {body.get("error")}')
+                time.sleep(2)
+            assert result is not None, f'Job did not complete within 60s, last body: {body}'
+            assert result == {'doubled': 6.0, 'is_positive': True}, result
+
+            image_path = Path(__file__).parent.parent / 'data' / 'images' / 'sewing-threads-smaller.jpg'
+            with open(image_path, 'rb') as f:
+                resp = requests.post(
+                    f'{endpoint}/insert-image',
+                    files={'image': ('image.jpg', f, 'image/jpeg')},
+                    headers=auth_headers,
+                    timeout=30,
+                )
+            print(f'POST /insert-image → {resp.status_code}: {resp.text}')
+            assert resp.status_code == 200, resp.text
+            job = resp.json()
+            assert 'job_url' in job, f'Expected BackgroundJobResponse, got: {job}'
+            result = None
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                poll = requests.get(job['job_url'], headers=auth_headers, timeout=10)
+                assert poll.status_code == 200, poll.text
+                body = poll.json()
+                if body['status'] == 'done':
+                    result = body['result']
+                    break
+                if body['status'] == 'error':
+                    raise AssertionError(f'/insert-image job failed: {body.get("error")}')
+                time.sleep(2)
+            assert result is not None, f'Image job did not complete within 60s, last body: {body}'
+            assert 'rotated' in result, f'Expected rotated URL in result: {result}'
+            rotated_url = result['rotated']
+            print(f'GET rotated image: {rotated_url}')
+            assert rotated_url.startswith('pxtfs://'), f'Expected pxtfs:// URL, got: {rotated_url}'
+            # t3 is a local empty table; resolve pxtfs:// → HTTP via a 1-row helper
+            presign_tbl = pxt.create_table('presign_helper', {'uri': pxt.String}, if_exists='replace')
+            presign_tbl.insert([{'uri': rotated_url}])
+            http_url = presign_tbl.select(url=pxtf.net.presigned_url(presign_tbl.uri, 3600)).collect()['url'][0]
+            pxt.drop_table('presign_helper')
+            img_resp = requests.get(http_url, timeout=30)
+            assert img_resp.status_code == 200, f'Could not fetch rotated image: {img_resp.status_code}'
+            assert img_resp.headers.get('content-type', '').startswith('image/'), img_resp.headers
         finally:
             for sid in service_ids.values():
                 try:

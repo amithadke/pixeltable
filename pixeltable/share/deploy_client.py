@@ -13,13 +13,17 @@ from pixeltable.env import Env
 from pixeltable.serving._config import lookup_environment_config
 from pixeltable.serving.deploy import build_deploy_bundle
 from pixeltable.share.protocol.service import (
+    AddEnvSecretRequest,
     CreateEnvironmentRequest,
     DeleteEnvironmentRequest,
     DeleteServiceRequest,
     DeployRequest,
     FinalizeDeployRequest,
     GetServiceRequest,
+    ListEnvSecretsRequest,
     ListEnvironmentsRequest,
+    ListServicesRequest,
+    RemoveEnvSecretRequest,
     UpdateEnvironmentRequest,
 )
 from pixeltable.share.publish import PIXELTABLE_API_URL, _api_headers, _upload_to_presigned_url
@@ -136,8 +140,7 @@ def environment_create(
 
 
 def environment_list(org_slug: str | None = None, json_output: bool = False) -> None:
-    resp = _post(ListEnvironmentsRequest(org_slug=org_slug))
-    envs = resp.get('environments', [])
+    envs = _list_envs(org_slug)
     if json_output:
         print(json.dumps(envs))
     elif not envs:
@@ -178,6 +181,42 @@ def environment_delete(env_name: str, org_slug: str | None = None, json_output: 
         print(f"Deleted environment '{env_name}'.")
 
 
+def environment_add_secret(
+    env_name: str, key: str, value: str, org_slug: str | None = None, json_output: bool = False
+) -> None:
+    env = _find_env_by_name(env_name, org_slug=org_slug)
+    resp = _post(AddEnvSecretRequest(org_slug=org_slug, env_id=env['env_id'], secret_name=key, secret_value=value))
+    if json_output:
+        print(json.dumps(resp))
+    else:
+        print(f"Secret '{key}' added to environment '{env_name}'.")
+
+
+def environment_remove_secret(
+    env_name: str, key: str, org_slug: str | None = None, json_output: bool = False
+) -> None:
+    env = _find_env_by_name(env_name, org_slug=org_slug)
+    _post(RemoveEnvSecretRequest(org_slug=org_slug, env_id=env['env_id'], secret_name=key))
+    if json_output:
+        print(json.dumps({'removed': key}))
+    else:
+        print(f"Secret '{key}' removed from environment '{env_name}'.")
+
+
+def environment_list_secrets(env_name: str, org_slug: str | None = None, json_output: bool = False) -> list[str]:
+    env = _find_env_by_name(env_name, org_slug=org_slug)
+    resp = _post(ListEnvSecretsRequest(org_slug=org_slug, env_id=env['env_id']))
+    secret_names: list[str] = resp.get('secret_names', [])
+    if json_output:
+        print(json.dumps(secret_names))
+    elif not secret_names:
+        print(f"No secrets in environment '{env_name}'.")
+    else:
+        for name in secret_names:
+            print(f'  {name}')
+    return secret_names
+
+
 def service_delete(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:
     _post(DeleteServiceRequest(org_slug=org_slug, service_id=service_id))
     if json_output:
@@ -186,9 +225,75 @@ def service_delete(service_id: str, org_slug: str | None = None, json_output: bo
         print(f"Deleted service '{service_id}'.")
 
 
+def service_list(org_slug: str | None = None, env_name: str | None = None, json_output: bool = False) -> list[dict[str, Any]]:
+    """List all cloud services for an org, optionally filtered by environment."""
+    envs = _list_envs(org_slug)
+    if env_name:
+        envs = [e for e in envs if e['env_name'] == env_name]
+
+    all_services: list[dict[str, Any]] = []
+    for env in envs:
+        resp = _post(ListServicesRequest(org_slug=org_slug, env_id=env['env_id']))
+        for svc in resp.get('services', []):
+            all_services.append({**svc, 'env_name': env['env_name']})
+
+    if json_output:
+        print(json.dumps(all_services, indent=2))
+    else:
+        if not all_services:
+            print('No services found.')
+        for svc in all_services:
+            run = svc.get('current_run') or {}
+            state = run.get('state') or svc.get('state', '?')
+            print(f"  [{svc['env_name']}] {svc['service_name']}  id={svc['service_id']}  state={state}")
+    return all_services
+
+
+def service_purge(
+    org_slug: str | None = None,
+    env_name: str | None = None,
+    yes: bool = False,
+    json_output: bool = False,
+) -> None:
+    """List and delete all services for an org (with confirmation), from both DB and NF."""
+    services = service_list(org_slug=org_slug, env_name=env_name, json_output=False)
+    if not services:
+        return
+
+    if not yes:
+        ans = input(f'Delete {len(services)} service(s)? This cannot be undone. [y/N] ').strip().lower()
+        if ans != 'y':
+            print('Aborted.')
+            return
+
+    results = []
+    for svc in services:
+        sid = svc['service_id']
+        svc_name = svc['service_name']
+        try:
+            # Stop first if running so delete is allowed
+            if svc.get('state') == 'RUNNING':
+                from pixeltable.share.protocol.service import StopServiceRequest
+                _post(StopServiceRequest(org_slug=org_slug, service_id=sid))
+            _post(DeleteServiceRequest(org_slug=org_slug, service_id=sid))
+            results.append({'service_id': sid, 'deleted': True})
+            if not json_output:
+                print(f"  Deleted {svc_name} ({sid})")
+        except Exception as exc:
+            results.append({'service_id': sid, 'deleted': False, 'error': str(exc)})
+            if not json_output:
+                print(f"  Failed to delete {svc_name} ({sid}): {exc}")
+
+    if json_output:
+        print(json.dumps(results, indent=2))
+
+
+def _list_envs(org_slug: str | None = None) -> list[dict[str, Any]]:
+    return _post(ListEnvironmentsRequest(org_slug=org_slug)).get('environments', [])
+
+
 def _find_env_by_name(env_name: str, org_slug: str | None = None) -> dict[str, Any]:
-    resp = _post(ListEnvironmentsRequest(org_slug=org_slug))
-    for env in resp.get('environments', []):
+    for env in _list_envs(org_slug):
         if env['env_name'] == env_name:
             return env
     raise excs.NotFoundError(excs.ErrorCode.SERVICE_NOT_FOUND, f"Environment '{env_name}' not found")

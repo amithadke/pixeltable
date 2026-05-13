@@ -127,6 +127,43 @@ def main() -> None:
     env_delete.add_argument('-y', '--yes', action='store_true', dest='yes', help='Skip confirmation prompt')
     env_delete.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
+    env_add_secret = env_sub.add_parser('add-secret', help='Add or update a secret in an environment')
+    env_add_secret.add_argument('name', help='Environment name')
+    env_add_secret.add_argument('key', help='Secret key name')
+    env_add_secret.add_argument('value', help='Secret value')
+    env_add_secret.add_argument('--org', required=True, dest='org', help='Organization slug')
+    env_add_secret.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    env_remove_secret = env_sub.add_parser('remove-secret', help='Remove a secret from an environment')
+    env_remove_secret.add_argument('name', help='Environment name')
+    env_remove_secret.add_argument('key', help='Secret key name')
+    env_remove_secret.add_argument('--org', required=True, dest='org', help='Organization slug')
+    env_remove_secret.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    env_list_secrets = env_sub.add_parser('list-secrets', help='List secret key names in an environment')
+    env_list_secrets.add_argument('name', help='Environment name')
+    env_list_secrets.add_argument('--org', required=True, dest='org', help='Organization slug')
+    env_list_secrets.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    svc_parser = subparsers.add_parser('service', help='Manage cloud deployment services')
+    svc_sub = svc_parser.add_subparsers(dest='svc_command', required=True)
+
+    svc_list = svc_sub.add_parser('list', help='List services for an org')
+    svc_list.add_argument('--org', required=True, dest='org', help='Organization slug')
+    svc_list.add_argument('--env', default=None, dest='env', help='Filter by environment name')
+    svc_list.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    svc_delete = svc_sub.add_parser('delete', help='Delete a service by ID')
+    svc_delete.add_argument('service_id', help='Service ID to delete')
+    svc_delete.add_argument('--org', required=True, dest='org', help='Organization slug')
+    svc_delete.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    svc_purge = svc_sub.add_parser('purge', help='Delete all services for an org (bulk cleanup)')
+    svc_purge.add_argument('--org', required=True, dest='org', help='Organization slug')
+    svc_purge.add_argument('--env', default=None, dest='env', help='Restrict to a specific environment')
+    svc_purge.add_argument('-y', '--yes', action='store_true', dest='yes', help='Skip confirmation prompt')
+    svc_purge.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -140,6 +177,8 @@ def main() -> None:
             _deploy(args)
         elif args.command == 'environment':
             _environment(args)
+        elif args.command == 'service':
+            _service(args)
     except pxt.Error as e:
         _emit_error(str(e), args.json)
         sys.exit(1)
@@ -339,8 +378,29 @@ def _environment(args: argparse.Namespace) -> None:
                 print('Aborted.')
                 return
         deploy_client.environment_delete(args.name, org_slug=org_slug, json_output=args.json)
+    elif cmd == 'add-secret':
+        deploy_client.environment_add_secret(args.name, args.key, args.value, org_slug=org_slug, json_output=args.json)
+    elif cmd == 'remove-secret':
+        deploy_client.environment_remove_secret(args.name, args.key, org_slug=org_slug, json_output=args.json)
+    elif cmd == 'list-secrets':
+        deploy_client.environment_list_secrets(args.name, org_slug=org_slug, json_output=args.json)
     else:
         raise AssertionError(f'unknown environment subcommand: {cmd}')
+
+
+def _service(args: argparse.Namespace) -> None:
+    from pixeltable.share import deploy_client
+
+    cmd = args.svc_command
+    org_slug = args.org
+    if cmd == 'list':
+        deploy_client.service_list(org_slug=org_slug, env_name=args.env, json_output=args.json)
+    elif cmd == 'delete':
+        deploy_client.service_delete(args.service_id, org_slug=org_slug, json_output=args.json)
+    elif cmd == 'purge':
+        deploy_client.service_purge(org_slug=org_slug, env_name=args.env, yes=args.yes, json_output=args.json)
+    else:
+        raise AssertionError(f'unknown service subcommand: {cmd}')
 
 
 def _serve(args: argparse.Namespace) -> None:
