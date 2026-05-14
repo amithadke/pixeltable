@@ -431,20 +431,20 @@ class TestDeployCloud:
             [[service.routes]]
             type = "compute"
             table = "deploy_tbl"
-            path = "/insert-text"
+            path = "/compute-text"
             outputs = ["upper_text", "text_len"]
 
             [[service.routes]]
             type = "compute"
             table = "deploy_nums"
-            path = "/insert-num"
+            path = "/compute-num"
             outputs = ["doubled", "is_positive"]
             background = true
 
             [[service.routes]]
             type = "compute"
             table = "deploy_imgs"
-            path = "/insert-image"
+            path = "/compute-image"
             uploadfile_inputs = ["image"]
             outputs = ["rotated"]
             background = true
@@ -474,14 +474,14 @@ class TestDeployCloud:
             assert resp.status_code == 200, resp.text
 
             resp = requests.post(
-                f'{endpoint}/insert-text', json={'text': 'hello world'}, headers=auth_headers, timeout=10
+                f'{endpoint}/compute-text', json={'text': 'hello world'}, headers=auth_headers, timeout=10
             )
-            print(f'POST /insert-text → {resp.status_code}: {resp.text}')
+            print(f'POST /compute-text → {resp.status_code}: {resp.text}')
             assert resp.status_code == 200, resp.text
             assert resp.json() == {'upper_text': 'HELLO WORLD', 'text_len': 11}, resp.text
 
-            resp = requests.post(f'{endpoint}/insert-num', json={'value': 3.0}, headers=auth_headers, timeout=10)
-            print(f'POST /insert-num → {resp.status_code}: {resp.text}')
+            resp = requests.post(f'{endpoint}/compute-num', json={'value': 3.0}, headers=auth_headers, timeout=10)
+            print(f'POST /compute-num → {resp.status_code}: {resp.text}')
             assert resp.status_code == 200, resp.text
             job = resp.json()
             assert 'job_url' in job, f'Expected BackgroundJobResponse, got: {job}'
@@ -496,7 +496,7 @@ class TestDeployCloud:
                     result = body['result']
                     break
                 if body['status'] == 'error':
-                    raise AssertionError(f'/insert-num job failed: {body.get("error")}')
+                    raise AssertionError(f'/compute-num job failed: {body.get("error")}')
                 time.sleep(2)
             assert result is not None, f'Job did not complete within 60s, last body: {body}'
             assert result == {'doubled': 6.0, 'is_positive': True}, result
@@ -504,12 +504,12 @@ class TestDeployCloud:
             image_path = Path(__file__).parent.parent / 'data' / 'images' / 'sewing-threads-smaller.jpg'
             with open(image_path, 'rb') as f:
                 resp = requests.post(
-                    f'{endpoint}/insert-image',
+                    f'{endpoint}/compute-image',
                     files={'image': ('image.jpg', f, 'image/jpeg')},
                     headers=auth_headers,
                     timeout=30,
                 )
-            print(f'POST /insert-image → {resp.status_code}: {resp.text}')
+            print(f'POST /compute-image → {resp.status_code}: {resp.text}')
             assert resp.status_code == 200, resp.text
             job = resp.json()
             assert 'job_url' in job, f'Expected BackgroundJobResponse, got: {job}'
@@ -523,7 +523,7 @@ class TestDeployCloud:
                     result = body['result']
                     break
                 if body['status'] == 'error':
-                    raise AssertionError(f'/insert-image job failed: {body.get("error")}')
+                    raise AssertionError(f'/compute-image job failed: {body.get("error")}')
                 time.sleep(2)
             assert result is not None, f'Image job did not complete within 60s, last body: {body}'
             assert 'rotated' in result, f'Expected rotated URL in result: {result}'

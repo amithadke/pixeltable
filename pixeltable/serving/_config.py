@@ -96,7 +96,8 @@ def create_service_from_config(cfg: config.ServiceConfig) -> 'fastapi.FastAPI':
     for route in cfg.routes:
         if isinstance(route, config.InsertRouteConfig):
             t = pxt.get_table(route.table)
-            router.add_insert_route(
+            add_route = router.add_compute_route if route.type == 'compute' else router.add_insert_route
+            add_route(
                 t,
                 path=route.path,
                 inputs=route.inputs,
