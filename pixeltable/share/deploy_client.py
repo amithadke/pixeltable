@@ -20,8 +20,8 @@ from pixeltable.share.protocol.service import (
     DeployRequest,
     FinalizeDeployRequest,
     GetServiceRequest,
-    ListEnvSecretsRequest,
     ListEnvironmentsRequest,
+    ListEnvSecretsRequest,
     ListServicesRequest,
     RemoveEnvSecretRequest,
     UpdateEnvironmentRequest,
@@ -192,9 +192,7 @@ def environment_add_secret(
         print(f"Secret '{key}' added to environment '{env_name}'.")
 
 
-def environment_remove_secret(
-    env_name: str, key: str, org_slug: str | None = None, json_output: bool = False
-) -> None:
+def environment_remove_secret(env_name: str, key: str, org_slug: str | None = None, json_output: bool = False) -> None:
     env = _find_env_by_name(env_name, org_slug=org_slug)
     _post(RemoveEnvSecretRequest(org_slug=org_slug, env_id=env['env_id'], secret_name=key))
     if json_output:
@@ -225,7 +223,9 @@ def service_delete(service_id: str, org_slug: str | None = None, json_output: bo
         print(f"Deleted service '{service_id}'.")
 
 
-def service_list(org_slug: str | None = None, env_name: str | None = None, json_output: bool = False) -> list[dict[str, Any]]:
+def service_list(
+    org_slug: str | None = None, env_name: str | None = None, json_output: bool = False
+) -> list[dict[str, Any]]:
     """List all cloud services for an org, optionally filtered by environment."""
     envs = _list_envs(org_slug)
     if env_name:
@@ -245,15 +245,12 @@ def service_list(org_slug: str | None = None, env_name: str | None = None, json_
         for svc in all_services:
             run = svc.get('current_run') or {}
             state = run.get('state') or svc.get('state', '?')
-            print(f"  [{svc['env_name']}] {svc['service_name']}  id={svc['service_id']}  state={state}")
+            print(f'  [{svc["env_name"]}] {svc["service_name"]}  id={svc["service_id"]}  state={state}')
     return all_services
 
 
 def service_purge(
-    org_slug: str | None = None,
-    env_name: str | None = None,
-    yes: bool = False,
-    json_output: bool = False,
+    org_slug: str | None = None, env_name: str | None = None, yes: bool = False, json_output: bool = False
 ) -> None:
     """List and delete all services for an org (with confirmation), from both DB and NF."""
     services = service_list(org_slug=org_slug, env_name=env_name, json_output=False)
@@ -274,15 +271,16 @@ def service_purge(
             # Stop first if running so delete is allowed
             if svc.get('state') == 'RUNNING':
                 from pixeltable.share.protocol.service import StopServiceRequest
+
                 _post(StopServiceRequest(org_slug=org_slug, service_id=sid))
             _post(DeleteServiceRequest(org_slug=org_slug, service_id=sid))
             results.append({'service_id': sid, 'deleted': True})
             if not json_output:
-                print(f"  Deleted {svc_name} ({sid})")
+                print(f'  Deleted {svc_name} ({sid})')
         except Exception as exc:
             results.append({'service_id': sid, 'deleted': False, 'error': str(exc)})
             if not json_output:
-                print(f"  Failed to delete {svc_name} ({sid}): {exc}")
+                print(f'  Failed to delete {svc_name} ({sid}): {exc}')
 
     if json_output:
         print(json.dumps(results, indent=2))

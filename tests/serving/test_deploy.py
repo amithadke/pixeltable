@@ -369,7 +369,9 @@ class TestDeployCloud:
             resp = requests.get(f'{endpoint}/health', timeout=10)
             assert resp.status_code == 200, resp.text
 
-            resp = requests.post(f'{endpoint}/insert-text', json={'text': 'hello world'}, headers=auth_headers, timeout=10)
+            resp = requests.post(
+                f'{endpoint}/insert-text', json={'text': 'hello world'}, headers=auth_headers, timeout=10
+            )
             print(f'POST /insert-text → {resp.status_code}: {resp.text}')
             assert resp.status_code == 200, resp.text
             assert resp.json() == {'upper_text': 'HELLO WORLD', 'text_len': 11}, resp.text
