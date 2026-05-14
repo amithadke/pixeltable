@@ -52,8 +52,8 @@ Examples:
   pxt serve query --query myapp.queries.search_docs --path /search"""
 
 _EPILOG_DEPLOY = """\
-To deploy into the environment `staging`:
-  pxt deploy staging
+To deploy a configured deployment:
+  pxt deploy <deployment-name>
 """
 
 
@@ -85,12 +85,13 @@ def main() -> None:
 
     deploy_parser = subparsers.add_parser(
         'deploy',
-        help='Build and upload a deploy bundle for the given environment',
+        help='Deploy the service in the specified deployment configuration to Pixeltable cloud.',
         epilog=_EPILOG_DEPLOY,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     deploy_parser.add_argument('env', help='Name of the target environment')
     deploy_parser.add_argument('--org', default=None, dest='org', help='Organization slug (overrides pixeltable.toml)')
+    deploy_parser.add_argument('deployment', help='Name of the target deployment')
     deploy_parser.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     env_parser = subparsers.add_parser(
