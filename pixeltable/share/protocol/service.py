@@ -33,9 +33,9 @@ class CreateEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.CREATE_ENVIRONMENT] = ServiceOperationType.CREATE_ENVIRONMENT
     org_slug: Optional[str] = None
     env_name: str
-    cpus: float = 0.5
-    memory_gb: float = 1.0
-    disk_gb: float = 50.0
+    cpus: Optional[float] = None
+    memory_gb: Optional[float] = None
+    disk_gb: Optional[float] = None
     gpu: Optional[str] = None
 
     @field_validator('gpu')

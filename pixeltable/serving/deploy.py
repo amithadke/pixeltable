@@ -35,15 +35,9 @@ def build_deploy_bundle(deployment_name: str) -> Path:
     cfg = lookup_deployment_config(deployment_name)
     Env.get().console_logger.info(f'Deploying {deployment_name!r} ...')
 
-    config_export = {
-        'environment': [cfg.model_dump(mode='json')],
-        'service': [service.model_dump(mode='json') for service in services_cfg],
-    }
-    md_export = _export_tables_md(services_cfg)
-    table_md_export = _export_table_metadata(services_cfg)
-    
     # Process the service, validating it and collecting its config and table MD.
     service_cfg, md_export = _process_service(cfg)
+    table_md_export = _export_table_metadata(service_cfg)
 
     Env.get().console_logger.info(f'The following service will be deployed: {cfg.service}')
 
@@ -181,15 +175,7 @@ def _collect_project_files(project_dir: Path, include: list[str] | None, exclude
     return sorted(files)
 
 
-def _export_tables_md(services_cfg: list[config.ServiceConfig]) -> dict[str, Any]:
-    # Get all tables mentioned by any route contained in this environment.
-    table_paths: set[str] = set()
-    for service in services_cfg:
-        for route in service.routes:
-            # Query routes are only supported for cloud-hosted tables (not implemented yet)
-            # TODO: we should catch this upstream to prevent users from trying to deploy unsupported configurations
-            assert not isinstance(route, config.QueryRouteConfig)
-            table_paths.add(route.table)
+def _export_tables_md(table_paths: set[str]) -> dict[str, Any]:
     sorted_paths = sorted(table_paths)
     tables = [pxt.get_table(path) for path in sorted_paths]
     # Map tbl_id → user-facing path for primary tables (ancestors get None).
@@ -227,12 +213,12 @@ class _MetadataEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def _export_table_metadata(services_cfg: list[config.ServiceConfig]) -> dict[str, Any]:
+def _export_table_metadata(service_cfg: config.ServiceConfig | None) -> dict[str, Any]:
     """Build table_metadata.json: HTTP route→[table_path] mapping and per-table get_metadata() results."""
     route_to_table: dict[str, list[str]] = {}
     table_paths: set[str] = set()
-    for service in services_cfg:
-        for route in service.routes:
+    if service_cfg is not None:
+        for route in service_cfg.routes:
             if not isinstance(route, config.QueryRouteConfig):
                 route_to_table[route.path] = [route.table]
                 table_paths.add(route.table)

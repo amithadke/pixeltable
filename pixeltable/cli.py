@@ -89,9 +89,8 @@ def main() -> None:
         epilog=_EPILOG_DEPLOY,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    deploy_parser.add_argument('env', help='Name of the target environment')
+    deploy_parser.add_argument('deployment', help='Name of the deployment configuration to deploy')
     deploy_parser.add_argument('--org', default=None, dest='org', help='Organization slug (overrides pixeltable.toml)')
-    deploy_parser.add_argument('deployment', help='Name of the target deployment')
     deploy_parser.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     env_parser = subparsers.add_parser(
@@ -102,11 +101,9 @@ def main() -> None:
     env_create = env_sub.add_parser('create', help='Create a new environment')
     env_create.add_argument('name', help='Environment name')
     env_create.add_argument('--org', required=True, dest='org', help='Organization slug')
-    env_create.add_argument('--cpus', type=float, default=0.5, help='vCPUs per replica (default: 0.5)')
-    env_create.add_argument(
-        '--memory-gb', type=float, default=1.0, dest='memory_gb', help='Memory in GB (default: 1.0)'
-    )
-    env_create.add_argument('--disk-gb', type=float, default=50.0, dest='disk_gb', help='Disk in GB (default: 50.0)')
+    env_create.add_argument('--cpus', type=float, default=None, help='vCPUs per replica')
+    env_create.add_argument('--memory-gb', type=float, default=None, dest='memory_gb', help='Memory in GB')
+    env_create.add_argument('--disk-gb', type=float, default=None, dest='disk_gb', help='Disk in GB')
     env_create.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     env_list = env_sub.add_parser('list', help='List environments')
@@ -348,13 +345,7 @@ def _add_serve_subparsers(serve_parser: argparse.ArgumentParser) -> None:
 def _deploy(args: argparse.Namespace) -> None:
     from pixeltable.share.deploy_client import deploy as cloud_deploy
 
-    env_arg = args.env
-    if '/' in env_arg:
-        org_slug, environment_name = env_arg.split('/', 1)
-    else:
-        org_slug = args.org
-        environment_name = env_arg
-    cloud_deploy(environment_name, json_output=args.json, org_slug=org_slug)
+    cloud_deploy(args.deployment, json_output=args.json, org_slug=args.org)
 
 
 def _environment(args: argparse.Namespace) -> None:

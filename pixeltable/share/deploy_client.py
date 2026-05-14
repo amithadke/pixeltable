@@ -10,7 +10,7 @@ import requests
 
 from pixeltable import exceptions as excs
 from pixeltable.env import Env
-from pixeltable.serving._config import lookup_environment_config
+from pixeltable.serving._config import lookup_deployment_config
 from pixeltable.serving.deploy import build_deploy_bundle
 from pixeltable.share.protocol.service import (
     AddEnvSecretRequest,
@@ -30,65 +30,65 @@ from pixeltable.share.publish import PIXELTABLE_API_URL, _api_headers, _upload_t
 
 
 def deploy(
-    environment_name: str, json_output: bool = False, watch: bool = True, org_slug: str | None = None
+    deployment_name: str, json_output: bool = False, watch: bool = True, org_slug: str | None = None
 ) -> dict[str, str]:
-    """Build the deploy bundle and start a cloud deployment for each service in the environment.
+    """Build the deploy bundle and start a cloud deployment for the deployment configuration.
 
-    Returns a mapping of service_name → service_id for all deployed services.
+    Returns a mapping of service_name → service_id for the deployed service.
     """
-    cfg = lookup_environment_config(environment_name)
-    bundle_path = build_deploy_bundle(environment_name)
-    service_ids: dict[str, str] = {}
+    cfg = lookup_deployment_config(deployment_name)
+    bundle_path = build_deploy_bundle(deployment_name)
 
-    for service_name_raw in cfg.services:
-        # Support "org_slug/service_name" format in the services list
-        if '/' in service_name_raw:
-            svc_org_slug, service_name = service_name_raw.split('/', 1)
-        else:
-            svc_org_slug = org_slug
-            service_name = service_name_raw
+    # cfg.env can be "org/env-name"; extract org and env name
+    if '/' in cfg.env:
+        env_org_slug, env_name = cfg.env.split('/', 1)
+    else:
+        env_org_slug = org_slug
+        env_name = cfg.env
 
-        deploy_resp = _post(
-            DeployRequest(
-                org_slug=svc_org_slug,
-                env_name=cfg.name,
-                service_name=service_name,
-                bundle_size_bytes=bundle_path.stat().st_size,
+    # Use the deployment name as the cloud-side service name (always a valid identifier)
+    service_name = cfg.name
+
+    deploy_resp = _post(
+        DeployRequest(
+            org_slug=env_org_slug,
+            env_name=env_name,
+            service_name=service_name,
+            bundle_size_bytes=bundle_path.stat().st_size,
+        )
+    )
+    upload_id = deploy_resp['upload_id']
+    upload_url = deploy_resp['upload_url']
+    service_id = deploy_resp['service_id']
+
+    _upload_to_presigned_url(bundle_path, upload_url)
+
+    finalize_resp = _post(FinalizeDeployRequest(org_slug=env_org_slug, upload_id=upload_id))
+    run = finalize_resp['run']
+
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    'status': 'deploying',
+                    'service': service_name,
+                    'run_id': run['run_id'],
+                    'version': run['version'],
+                    'state': run['state'],
+                }
             )
         )
-        upload_id = deploy_resp['upload_id']
-        upload_url = deploy_resp['upload_url']
-        service_id = deploy_resp['service_id']
-        service_ids[service_name] = service_id
+    else:
+        Env.get().console_logger.info(
+            f"Service '{service_name}': deployment started (run {run['version']}, state: {run['state']})"
+        )
 
-        _upload_to_presigned_url(bundle_path, upload_url)
+    if watch:
+        endpoint = _poll_until_running(service_id, org_slug=env_org_slug, json_output=json_output)
+        if endpoint and not json_output:
+            Env.get().console_logger.info(f"Service '{service_name}' is live at: {endpoint}")
 
-        finalize_resp = _post(FinalizeDeployRequest(org_slug=svc_org_slug, upload_id=upload_id))
-        run = finalize_resp['run']
-
-        if json_output:
-            print(
-                json.dumps(
-                    {
-                        'status': 'deploying',
-                        'service': service_name,
-                        'run_id': run['run_id'],
-                        'version': run['version'],
-                        'state': run['state'],
-                    }
-                )
-            )
-        else:
-            Env.get().console_logger.info(
-                f"Service '{service_name}': deployment started (run {run['version']}, state: {run['state']})"
-            )
-
-        if watch:
-            endpoint = _poll_until_running(service_id, org_slug=svc_org_slug, json_output=json_output)
-            if endpoint and not json_output:
-                Env.get().console_logger.info(f"Service '{service_name}' is live at: {endpoint}")
-
-    return service_ids
+    return {service_name: service_id}
 
 
 def _poll_until_running(
@@ -127,7 +127,12 @@ def _poll_until_running(
 
 
 def environment_create(
-    env_name: str, cpus: float, memory_gb: float, disk_gb: float, org_slug: str | None = None, json_output: bool = False
+    env_name: str,
+    cpus: float | None = None,
+    memory_gb: float | None = None,
+    disk_gb: float | None = None,
+    org_slug: str | None = None,
+    json_output: bool = False,
 ) -> None:
     resp = _post(
         CreateEnvironmentRequest(org_slug=org_slug, env_name=env_name, cpus=cpus, memory_gb=memory_gb, disk_gb=disk_gb)
