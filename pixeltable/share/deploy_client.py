@@ -22,6 +22,7 @@ from pixeltable.share.protocol.service import (
     GetServiceRequest,
     ListEnvironmentsRequest,
     ListEnvSecretsRequest,
+    ListServiceRunsRequest,
     ListServicesRequest,
     RemoveEnvSecretRequest,
     UpdateEnvironmentRequest,
@@ -223,6 +224,11 @@ def environment_list_secrets(env_name: str, org_slug: str | None = None, json_ou
 def service_get(service_id: str, org_slug: str | None = None) -> dict[str, Any]:
     """Return the full service record including current_run with workers_min/workers_max."""
     return _post(GetServiceRequest(org_slug=org_slug, service_id=service_id))
+
+
+def service_list_runs(service_id: str, org_slug: str | None = None) -> list[dict[str, Any]]:
+    """Return all run records for a service, each with workers_min/workers_max."""
+    return _post(ListServiceRunsRequest(org_slug=org_slug, service_id=service_id)).get('runs', [])
 
 
 def service_delete(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:

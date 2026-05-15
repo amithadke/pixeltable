@@ -26,7 +26,7 @@ from pixeltable.runtime import get_runtime
 from pixeltable.serving._config import create_service_from_config, lookup_service_config
 from pixeltable.serving.bootstrap import _create_tables_from_md
 from pixeltable.serving.deploy import build_deploy_bundle
-from pixeltable.share.deploy_client import deploy, service_delete, service_get
+from pixeltable.share.deploy_client import deploy, service_delete, service_get, service_list_runs
 from tests.utils import (
     capture_console_output,
     pxt_raises,
@@ -418,14 +418,7 @@ class TestDeployCloud:
 
         deployment_name = svc_name
         config_path = tmp_path / 'pixeltable.toml'
-        config_path.write_text(
-            textwrap.dedent(f"""\
-            [[deployment]]
-            name = "{deployment_name}"
-            service = "{svc_name}"
-            env = "{env_name}"
-            workers = 3
-
+        service_routes = textwrap.dedent(f"""\
             [[service]]
             name = "{svc_name}"
 
@@ -450,37 +443,45 @@ class TestDeployCloud:
             outputs = ["rotated"]
             background = true
             """)
-        )
+
+        def _write_toml(workers: int) -> None:
+            config_path.write_text(
+                textwrap.dedent(f"""\
+                [[deployment]]
+                name = "{deployment_name}"
+                service = "{svc_name}"
+                env = "{env_name}"
+                workers = {workers}
+
+                """) + service_routes
+            )
+            Config.init({}, reinit=True)
+
+        def _extract_endpoint(output: str) -> str:
+            for line in output.splitlines():
+                if 'live at:' in line.lower():
+                    return line.split()[-1]
+            raise AssertionError(f'Expected live endpoint in output:\n{output}')
+
         monkeypatch.chdir(tmp_path)
-        Config.init({}, reinit=True)
 
-        with capture_console_output() as out:
+        # ── Deploy 1: 1 worker ─────────────────────────────────────────────────
+        _write_toml(workers=1)
+        with capture_console_output() as out1:
             service_ids = deploy(deployment_name, watch=True, org_slug=org_slug)
-
-        output = out.getvalue()
-        assert 'is live at:' in output.lower(), f'Expected live endpoint in output:\n{output}'
-
-        endpoint = None
-        for line in output.splitlines():
-            if 'live at:' in line.lower():
-                endpoint = line.split()[-1]
-                break
-        assert endpoint is not None
-
+        assert 'is live at:' in out1.getvalue().lower(), f'Deploy 1 output:\n{out1.getvalue()}'
+        endpoint = _extract_endpoint(out1.getvalue())
         service_id = service_ids[svc_name]
+
         api_key = os.environ['PIXELTABLE_API_KEY']
         auth_headers = {'X-api-key': api_key}
 
-        # Verify the run record shows 3 workers as configured in the TOML.
-        svc_resp = service_get(service_id, org_slug=org_slug)
-        current_run = svc_resp['service']['current_run']
-        assert current_run is not None, 'No current_run on service after deployment'
-        assert current_run['workers_min'] == 3, (
-            f"Expected workers_min=3, got {current_run.get('workers_min')} "
-            f"(env_config={current_run.get('env_config')})"
-        )
-        assert current_run['workers_max'] == 3, f"Expected workers_max=3, got {current_run.get('workers_max')}"
-        print(f'workers_min={current_run["workers_min"]} workers_max={current_run["workers_max"]} ✓')
+        run1 = service_get(service_id, org_slug=org_slug)['service']['current_run']
+        assert run1 is not None, 'No current_run after deploy 1'
+        assert run1['workers_min'] == 1, f"Deploy 1: expected workers_min=1, got {run1.get('workers_min')}"
+        assert run1['workers_max'] == 1
+        assert run1['version'] == 'v1'
+        print(f'Deploy 1: workers_min={run1["workers_min"]} version={run1["version"]} endpoint={endpoint} ✓')
 
         try:
             resp = requests.get(f'{endpoint}/health', timeout=10)
@@ -551,6 +552,37 @@ class TestDeployCloud:
             img_resp = requests.get(http_url, timeout=30)
             assert img_resp.status_code == 200, f'Could not fetch rotated image: {img_resp.status_code}'
             assert img_resp.headers.get('content-type', '').startswith('image/'), img_resp.headers
+
+            # ── Deploy 2: 3 workers (same service) ────────────────────────────
+            _write_toml(workers=3)
+            with capture_console_output() as out2:
+                service_ids2 = deploy(deployment_name, watch=True, org_slug=org_slug)
+            assert 'is live at:' in out2.getvalue().lower(), f'Deploy 2 output:\n{out2.getvalue()}'
+            endpoint2 = _extract_endpoint(out2.getvalue())
+            assert service_ids2[svc_name] == service_id, 'Redeploy must reuse the same service_id'
+
+            run2 = service_get(service_id, org_slug=org_slug)['service']['current_run']
+            assert run2 is not None, 'No current_run after deploy 2'
+            assert run2['workers_min'] == 3, f"Deploy 2: expected workers_min=3, got {run2.get('workers_min')}"
+            assert run2['workers_max'] == 3
+            assert run2['version'] == 'v2'
+            print(f'Deploy 2: workers_min={run2["workers_min"]} version={run2["version"]} endpoint={endpoint2} ✓')
+
+            # Endpoint must still serve traffic after redeploy.
+            resp = requests.post(
+                f'{endpoint2}/compute-text', json={'text': 'after redeploy'}, headers=auth_headers, timeout=10
+            )
+            assert resp.status_code == 200, f'Endpoint after redeploy: {resp.status_code} {resp.text}'
+            assert resp.json() == {'upper_text': 'AFTER REDEPLOY', 'text_len': 12}, resp.text
+
+            # list_service_runs must return both runs with correct per-run worker counts.
+            all_runs = service_list_runs(service_id, org_slug=org_slug)
+            assert len(all_runs) == 2, f'Expected 2 service runs, got {len(all_runs)}: {all_runs}'
+            by_version = {r['version']: r for r in all_runs}
+            assert by_version['v1']['workers_min'] == 1, f"v1 workers_min: {by_version['v1'].get('workers_min')}"
+            assert by_version['v2']['workers_min'] == 3, f"v2 workers_min: {by_version['v2'].get('workers_min')}"
+            print(f'list_service_runs: v1.workers_min={by_version["v1"]["workers_min"]} '
+                  f'v2.workers_min={by_version["v2"]["workers_min"]} ✓')
         finally:
             for sid in service_ids.values():
                 try:
