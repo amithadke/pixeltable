@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 import inspect
 import logging
@@ -61,6 +62,30 @@ class JobStatusResponse(pydantic.BaseModel):
 # request.url_for(_MEDIA_ROUTE_NAME, path=...) to build absolute media URLs at request time.
 _MEDIA_ROUTE_NAME = 'pxt_serve_media'
 _JOB_STATUS_ROUTE_NAME = 'pxt_serve_job_status'
+
+# Both constants are read once at process startup.
+# _POD_PREFIX: base64url(pod hostname) + '_', embedded in every job ID so the gateway can
+#   decode the pod and route job-status requests to the replica that owns the in-memory job.
+#   K8s / NF always sets HOSTNAME to the pod name.
+# _JOB_URL_PREFIX: {gateway}/{org}/{env}/{svc}/jobs  — set by deploy_workflow at deploy time.
+#   Empty in local dev; job URLs fall back to request.url_for() in that case.
+_POD_PREFIX: str = (
+    base64.urlsafe_b64encode(os.environ['HOSTNAME'].encode()).rstrip(b'=').decode() + '_'
+    if 'HOSTNAME' in os.environ
+    else ''
+)
+_JOB_URL_PREFIX: str = os.environ.get('JOB_ID_URL_PREFIX', '')
+
+
+def _new_job_id() -> str:
+    return _POD_PREFIX + uuid.uuid4().hex
+
+
+def _job_url(job_id: str, request: Any) -> str:
+    """Return the public URL for polling a background job's status."""
+    if _JOB_URL_PREFIX:
+        return f'{_JOB_URL_PREFIX}/{job_id}'
+    return str(request.url_for(_JOB_STATUS_ROUTE_NAME, job_id=job_id))
 
 
 # ColumnType.Type -> JSON-Schema contentMediaType
@@ -144,11 +169,11 @@ class PxtEndpoint:
                     kwargs[input_name] = str(path)
 
         if self.background:
-            job_id = uuid.uuid4().hex
+            job_id = _new_job_id()
             fut = self.router._executor.submit(_run_endpoint_op, self.endpoint_op, kwargs, tmp_paths, url_for_media)
             with self.router._jobs_lock:
                 self.router._jobs[job_id] = fut
-            return BackgroundJobResponse(id=job_id, job_url=str(request.url_for(_JOB_STATUS_ROUTE_NAME, job_id=job_id)))
+            return BackgroundJobResponse(id=job_id, job_url=_job_url(job_id, request))
         else:
             return _run_endpoint_op(self.endpoint_op, kwargs, tmp_paths, url_for_media)
 
@@ -1571,17 +1596,11 @@ class FastAPIRouter(fastapi.APIRouter):
                         kwargs[input_name] = str(path)
 
             if background:
-                job_id = uuid.uuid4().hex
+                job_id = _new_job_id()
                 fut = self._executor.submit(_run_endpoint_op, endpoint_op, kwargs, tmp_paths, url_for_media)
                 with self._jobs_lock:
                     self._jobs[job_id] = fut
-                base = os.environ.get('JOB_ID_URL_PREFIX', '')
-                if base:
-                    pod = os.environ.get('HOSTNAME', '')
-                    job_url = f'{base}/{pod}/{job_id}' if pod else f'{base}/{job_id}'
-                else:
-                    job_url = str(request.url_for(_JOB_STATUS_ROUTE_NAME, job_id=job_id))
-                return BackgroundJobResponse(id=job_id, job_url=job_url)
+                return BackgroundJobResponse(id=job_id, job_url=_job_url(job_id, request))
             else:
                 return _run_endpoint_op(endpoint_op, kwargs, tmp_paths, url_for_media)
 
