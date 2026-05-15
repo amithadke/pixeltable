@@ -220,6 +220,11 @@ def environment_list_secrets(env_name: str, org_slug: str | None = None, json_ou
     return secret_names
 
 
+def service_get(service_id: str, org_slug: str | None = None) -> dict[str, Any]:
+    """Return the full service record including current_run with workers_min/workers_max."""
+    return _post(GetServiceRequest(org_slug=org_slug, service_id=service_id))
+
+
 def service_delete(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:
     _post(DeleteServiceRequest(org_slug=org_slug, service_id=service_id))
     if json_output:

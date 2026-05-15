@@ -26,7 +26,7 @@ from pixeltable.runtime import get_runtime
 from pixeltable.serving._config import create_service_from_config, lookup_service_config
 from pixeltable.serving.bootstrap import _create_tables_from_md
 from pixeltable.serving.deploy import build_deploy_bundle
-from pixeltable.share.deploy_client import deploy, service_delete
+from pixeltable.share.deploy_client import deploy, service_delete, service_get
 from tests.utils import (
     capture_console_output,
     pxt_raises,
@@ -424,6 +424,7 @@ class TestDeployCloud:
             name = "{deployment_name}"
             service = "{svc_name}"
             env = "{env_name}"
+            workers = 3
 
             [[service]]
             name = "{svc_name}"
@@ -466,8 +467,20 @@ class TestDeployCloud:
                 break
         assert endpoint is not None
 
+        service_id = service_ids[svc_name]
         api_key = os.environ['PIXELTABLE_API_KEY']
         auth_headers = {'X-api-key': api_key}
+
+        # Verify the run record shows 3 workers as configured in the TOML.
+        svc_resp = service_get(service_id, org_slug=org_slug)
+        current_run = svc_resp['service']['current_run']
+        assert current_run is not None, 'No current_run on service after deployment'
+        assert current_run['workers_min'] == 3, (
+            f"Expected workers_min=3, got {current_run.get('workers_min')} "
+            f"(env_config={current_run.get('env_config')})"
+        )
+        assert current_run['workers_max'] == 3, f"Expected workers_max=3, got {current_run.get('workers_max')}"
+        print(f'workers_min={current_run["workers_min"]} workers_max={current_run["workers_max"]} ✓')
 
         try:
             resp = requests.get(f'{endpoint}/health', timeout=10)

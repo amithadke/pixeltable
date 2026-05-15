@@ -154,6 +154,8 @@ class ServiceRunRecord(BaseModel):
     bundle_id: str
     version: str
     state: str  # PENDING | BUILDING | DEPLOYING | STARTING | RUNNING | STOPPED | FAILED
+    workers_min: int = 1
+    workers_max: int = 1
     endpoint: Optional[str]
     public_endpoint: Optional[str] = None
     error: Optional[str]
