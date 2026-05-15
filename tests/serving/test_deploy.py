@@ -573,7 +573,7 @@ class TestDeployCloud:
                 f'{endpoint2}/compute-text', json={'text': 'after redeploy'}, headers=auth_headers, timeout=10
             )
             assert resp.status_code == 200, f'Endpoint after redeploy: {resp.status_code} {resp.text}'
-            assert resp.json() == {'upper_text': 'AFTER REDEPLOY', 'text_len': 12}, resp.text
+            assert resp.json() == {'upper_text': 'AFTER REDEPLOY', 'text_len': 14}, resp.text
 
             # list_service_runs must return both runs with correct per-run worker counts.
             all_runs = service_list_runs(service_id, org_slug=org_slug)

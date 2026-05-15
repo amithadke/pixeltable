@@ -25,6 +25,8 @@ from pixeltable.share.protocol.service import (
     ListServiceRunsRequest,
     ListServicesRequest,
     RemoveEnvSecretRequest,
+    StartServiceRequest,
+    StopServiceRequest,
     UpdateEnvironmentRequest,
 )
 from pixeltable.share.publish import PIXELTABLE_API_URL, _api_headers, _upload_to_presigned_url
@@ -237,6 +239,22 @@ def service_delete(service_id: str, org_slug: str | None = None, json_output: bo
         print(json.dumps({'deleted': service_id}))
     else:
         print(f"Deleted service '{service_id}'.")
+
+
+def service_stop(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    _post(StopServiceRequest(org_slug=org_slug, service_id=service_id))
+    if json_output:
+        print(json.dumps({'stopped': service_id}))
+    else:
+        print(f"Stopped service '{service_id}'.")
+
+
+def service_start(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    _post(StartServiceRequest(org_slug=org_slug, service_id=service_id))
+    if json_output:
+        print(json.dumps({'started': service_id}))
+    else:
+        print(f"Started service '{service_id}'.")
 
 
 def service_list(

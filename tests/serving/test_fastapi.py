@@ -1636,8 +1636,9 @@ class TestFastAPI:
             assert value is not None
             return BgResp(doubled=value * 2)
 
-        prefix = 'https://pxt.run/myorg/prod/my-svc/jobs/base64podname'
-        monkeypatch.setenv('JOB_ID_URL_PREFIX', prefix)
+        prefix = 'https://pxt.run/myorg/prod/my-svc/jobs'
+        import pixeltable.serving._fastapi as _fastapi_mod
+        monkeypatch.setattr(_fastapi_mod, '_JOB_URL_PREFIX', prefix)
         client = make_test_client(router)
 
         resp = client.post('/bg', json={'id': 1, 'value': 5})
