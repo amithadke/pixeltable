@@ -233,12 +233,13 @@ def service_list_runs(service_id: str, org_slug: str | None = None) -> list[dict
     return _post(ListServiceRunsRequest(org_slug=org_slug, service_id=service_id)).get('runs', [])
 
 
-def service_delete(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:
+def service_delete(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    service_id = _resolve_service_id(service_name, org_slug)
     _post(DeleteServiceRequest(org_slug=org_slug, service_id=service_id))
     if json_output:
         print(json.dumps({'deleted': service_id}))
     else:
-        print(f"Deleted service '{service_id}'.")
+        print(f"Deleted service '{service_name}'.")
 
 
 def service_stop(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:

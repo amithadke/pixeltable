@@ -161,8 +161,8 @@ def main() -> None:
     svc_start.add_argument('--org', required=True, dest='org', help='Organization slug')
     svc_start.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
-    svc_delete = svc_sub.add_parser('delete', help='Delete a service by ID')
-    svc_delete.add_argument('service_id', help='Service ID to delete')
+    svc_delete = svc_sub.add_parser('delete', help='Delete a service by name')
+    svc_delete.add_argument('service_name', help='Service name to delete')
     svc_delete.add_argument('--org', required=True, dest='org', help='Organization slug')
     svc_delete.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
@@ -402,7 +402,7 @@ def _service(args: argparse.Namespace) -> None:
     elif cmd == 'start':
         deploy_client.service_start(args.service_name, org_slug=org_slug, json_output=args.json)
     elif cmd == 'delete':
-        deploy_client.service_delete(args.service_id, org_slug=org_slug, json_output=args.json)
+        deploy_client.service_delete(args.service_name, org_slug=org_slug, json_output=args.json)
     elif cmd == 'purge':
         deploy_client.service_purge(org_slug=org_slug, env_name=args.env, yes=args.yes, json_output=args.json)
     else:
