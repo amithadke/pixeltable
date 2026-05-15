@@ -241,20 +241,22 @@ def service_delete(service_id: str, org_slug: str | None = None, json_output: bo
         print(f"Deleted service '{service_id}'.")
 
 
-def service_stop(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:
+def service_stop(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    service_id = _resolve_service_id(service_name, org_slug)
     _post(StopServiceRequest(org_slug=org_slug, service_id=service_id))
     if json_output:
         print(json.dumps({'stopped': service_id}))
     else:
-        print(f"Stopped service '{service_id}'.")
+        print(f"Stopped service '{service_name}'.")
 
 
-def service_start(service_id: str, org_slug: str | None = None, json_output: bool = False) -> None:
+def service_start(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    service_id = _resolve_service_id(service_name, org_slug)
     _post(StartServiceRequest(org_slug=org_slug, service_id=service_id))
     if json_output:
         print(json.dumps({'started': service_id}))
     else:
-        print(f"Started service '{service_id}'.")
+        print(f"Started service '{service_name}'.")
 
 
 def service_list(
@@ -318,6 +320,17 @@ def service_purge(
 
     if json_output:
         print(json.dumps(results, indent=2))
+
+
+def _resolve_service_id(service_name: str, org_slug: str | None = None) -> str:
+    services = service_list(org_slug=org_slug, json_output=False)
+    matches = [s for s in services if s['service_name'] == service_name]
+    if not matches:
+        raise excs.NotFoundError(excs.ErrorCode.SERVICE_NOT_FOUND, f"Service '{service_name}' not found")
+    if len(matches) > 1:
+        ids = ', '.join(s['service_id'] for s in matches)
+        raise excs.RequestError(excs.ErrorCode.INVALID_ARGUMENT, f"Multiple services named '{service_name}': {ids}")
+    return matches[0]['service_id']
 
 
 def _list_envs(org_slug: str | None = None) -> list[dict[str, Any]]:

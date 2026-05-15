@@ -152,12 +152,12 @@ def main() -> None:
     svc_list.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     svc_stop = svc_sub.add_parser('stop', help='Stop a running service')
-    svc_stop.add_argument('service_id', help='Service ID to stop')
+    svc_stop.add_argument('service_name', help='Service name to stop')
     svc_stop.add_argument('--org', required=True, dest='org', help='Organization slug')
     svc_stop.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     svc_start = svc_sub.add_parser('start', help='Start a stopped service')
-    svc_start.add_argument('service_id', help='Service ID to start')
+    svc_start.add_argument('service_name', help='Service name to start')
     svc_start.add_argument('--org', required=True, dest='org', help='Organization slug')
     svc_start.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
@@ -398,9 +398,9 @@ def _service(args: argparse.Namespace) -> None:
     if cmd == 'list':
         deploy_client.service_list(org_slug=org_slug, env_name=args.env, json_output=args.json)
     elif cmd == 'stop':
-        deploy_client.service_stop(args.service_id, org_slug=org_slug, json_output=args.json)
+        deploy_client.service_stop(args.service_name, org_slug=org_slug, json_output=args.json)
     elif cmd == 'start':
-        deploy_client.service_start(args.service_id, org_slug=org_slug, json_output=args.json)
+        deploy_client.service_start(args.service_name, org_slug=org_slug, json_output=args.json)
     elif cmd == 'delete':
         deploy_client.service_delete(args.service_id, org_slug=org_slug, json_output=args.json)
     elif cmd == 'purge':
