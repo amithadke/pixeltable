@@ -255,9 +255,12 @@ def service_start(service_name: str, org_slug: str | None = None, json_output: b
     service_id = _resolve_service_id(service_name, org_slug)
     _post(StartServiceRequest(org_slug=org_slug, service_id=service_id))
     if json_output:
-        print(json.dumps({'started': service_id}))
+        print(json.dumps({'status': 'starting', 'service': service_name}))
     else:
-        print(f"Started service '{service_name}'.")
+        Env.get().console_logger.info(f"Service '{service_name}': starting...")
+    endpoint = _poll_until_running(service_id, org_slug=org_slug, json_output=json_output)
+    if endpoint and not json_output:
+        Env.get().console_logger.info(f"Service '{service_name}' is live at: {endpoint}")
 
 
 def service_list(
