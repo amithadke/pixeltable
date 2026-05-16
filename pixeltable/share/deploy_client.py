@@ -37,7 +37,7 @@ def deploy(
 ) -> dict[str, str]:
     """Build the deploy bundle and start a cloud deployment for the deployment configuration.
 
-    Returns a mapping of service_name → service_id for the deployed service.
+    Returns a mapping of service_name → env_name for the deployed service.
     """
     cfg = lookup_deployment_config(deployment_name)
     bundle_path = build_deploy_bundle(deployment_name)
@@ -49,7 +49,6 @@ def deploy(
         env_org_slug = org_slug
         env_name = cfg.env
 
-    # Use the deployment name as the cloud-side service name (always a valid identifier)
     service_name = cfg.name
 
     deploy_resp = _post(
@@ -62,7 +61,6 @@ def deploy(
     )
     upload_id = deploy_resp['upload_id']
     upload_url = deploy_resp['upload_url']
-    service_id = deploy_resp['service_id']
 
     _upload_to_presigned_url(bundle_path, upload_url)
 
@@ -87,22 +85,27 @@ def deploy(
         )
 
     if watch:
-        endpoint = _poll_until_running(service_id, org_slug=env_org_slug, json_output=json_output)
+        endpoint = _poll_until_running(service_name, env_name, org_slug=env_org_slug, json_output=json_output)
         if endpoint and not json_output:
             Env.get().console_logger.info(f"Service '{service_name}' is live at: {endpoint}")
 
-    return {service_name: service_id}
+    return {service_name: env_name}
 
 
 def _poll_until_running(
-    service_id: str, timeout: int = 600, interval: int = 10, json_output: bool = False, org_slug: str | None = None
+    service_name: str,
+    env_name: str | None,
+    timeout: int = 600,
+    interval: int = 10,
+    json_output: bool = False,
+    org_slug: str | None = None,
 ) -> str | None:
     """Poll GET_SERVICE until the current run reaches RUNNING or FAILED; return endpoint or None."""
     deadline = time.monotonic() + timeout
     last_state: str | None = None
 
     while time.monotonic() < deadline:
-        resp = _post(GetServiceRequest(org_slug=org_slug, service_id=service_id))
+        resp = _post(GetServiceRequest(org_slug=org_slug, service_name=service_name, env_name=env_name))
         svc = resp.get('service', {})
         current_run = svc.get('current_run')
         if current_run:
@@ -167,10 +170,14 @@ def environment_update(
     org_slug: str | None = None,
     json_output: bool = False,
 ) -> None:
-    env = _find_env_by_name(env_name, org_slug=org_slug)
     resp = _post(
         UpdateEnvironmentRequest(
-            org_slug=org_slug, env_id=env['env_id'], env_name=new_name, cpus=cpus, memory_gb=memory_gb, disk_gb=disk_gb
+            org_slug=org_slug,
+            env_name=env_name,
+            new_name=new_name,
+            cpus=cpus,
+            memory_gb=memory_gb,
+            disk_gb=disk_gb,
         )
     )
     updated_env = resp['environment']
@@ -181,8 +188,7 @@ def environment_update(
 
 
 def environment_delete(env_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
-    env = _find_env_by_name(env_name, org_slug=org_slug)
-    _post(DeleteEnvironmentRequest(org_slug=org_slug, env_id=env['env_id']))
+    _post(DeleteEnvironmentRequest(org_slug=org_slug, env_name=env_name))
     if json_output:
         print(json.dumps({'deleted': env_name}))
     else:
@@ -192,8 +198,7 @@ def environment_delete(env_name: str, org_slug: str | None = None, json_output: 
 def environment_add_secret(
     env_name: str, key: str, value: str, org_slug: str | None = None, json_output: bool = False
 ) -> None:
-    env = _find_env_by_name(env_name, org_slug=org_slug)
-    resp = _post(AddEnvSecretRequest(org_slug=org_slug, env_id=env['env_id'], secret_name=key, secret_value=value))
+    resp = _post(AddEnvSecretRequest(org_slug=org_slug, env_name=env_name, secret_name=key, secret_value=value))
     if json_output:
         print(json.dumps(resp))
     else:
@@ -201,8 +206,7 @@ def environment_add_secret(
 
 
 def environment_remove_secret(env_name: str, key: str, org_slug: str | None = None, json_output: bool = False) -> None:
-    env = _find_env_by_name(env_name, org_slug=org_slug)
-    _post(RemoveEnvSecretRequest(org_slug=org_slug, env_id=env['env_id'], secret_name=key))
+    _post(RemoveEnvSecretRequest(org_slug=org_slug, env_name=env_name, secret_name=key))
     if json_output:
         print(json.dumps({'removed': key}))
     else:
@@ -210,8 +214,7 @@ def environment_remove_secret(env_name: str, key: str, org_slug: str | None = No
 
 
 def environment_list_secrets(env_name: str, org_slug: str | None = None, json_output: bool = False) -> list[str]:
-    env = _find_env_by_name(env_name, org_slug=org_slug)
-    resp = _post(ListEnvSecretsRequest(org_slug=org_slug, env_id=env['env_id']))
+    resp = _post(ListEnvSecretsRequest(org_slug=org_slug, env_name=env_name))
     secret_names: list[str] = resp.get('secret_names', [])
     if json_output:
         print(json.dumps(secret_names))
@@ -223,42 +226,43 @@ def environment_list_secrets(env_name: str, org_slug: str | None = None, json_ou
     return secret_names
 
 
-def service_get(service_id: str, org_slug: str | None = None) -> dict[str, Any]:
+def service_get(service_name: str, env_name: str | None = None, org_slug: str | None = None) -> dict[str, Any]:
     """Return the full service record including current_run with workers_min/workers_max."""
-    return _post(GetServiceRequest(org_slug=org_slug, service_id=service_id))
+    return _post(GetServiceRequest(org_slug=org_slug, service_name=service_name, env_name=env_name))
 
 
-def service_list_runs(service_id: str, org_slug: str | None = None) -> list[dict[str, Any]]:
+def service_list_runs(
+    service_name: str, env_name: str | None = None, org_slug: str | None = None
+) -> list[dict[str, Any]]:
     """Return all run records for a service, each with workers_min/workers_max."""
-    return _post(ListServiceRunsRequest(org_slug=org_slug, service_id=service_id)).get('runs', [])
+    return _post(
+        ListServiceRunsRequest(org_slug=org_slug, service_name=service_name, env_name=env_name)
+    ).get('runs', [])
 
 
 def service_delete(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
-    service_id = _resolve_service_id(service_name, org_slug)
-    _post(DeleteServiceRequest(org_slug=org_slug, service_id=service_id))
+    _post(DeleteServiceRequest(org_slug=org_slug, service_name=service_name))
     if json_output:
-        print(json.dumps({'deleted': service_id}))
+        print(json.dumps({'deleted': service_name}))
     else:
         print(f"Deleted service '{service_name}'.")
 
 
 def service_stop(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
-    service_id = _resolve_service_id(service_name, org_slug)
-    _post(StopServiceRequest(org_slug=org_slug, service_id=service_id))
+    _post(StopServiceRequest(org_slug=org_slug, service_name=service_name))
     if json_output:
-        print(json.dumps({'stopped': service_id}))
+        print(json.dumps({'stopped': service_name}))
     else:
         print(f"Stopped service '{service_name}'.")
 
 
 def service_start(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
-    service_id = _resolve_service_id(service_name, org_slug)
-    _post(StartServiceRequest(org_slug=org_slug, service_id=service_id))
+    _post(StartServiceRequest(org_slug=org_slug, service_name=service_name))
     if json_output:
         print(json.dumps({'status': 'starting', 'service': service_name}))
     else:
         Env.get().console_logger.info(f"Service '{service_name}': starting...")
-    endpoint = _poll_until_running(service_id, org_slug=org_slug, json_output=json_output)
+    endpoint = _poll_until_running(service_name, env_name=None, org_slug=org_slug, json_output=json_output)
     if endpoint and not json_output:
         Env.get().console_logger.info(f"Service '{service_name}' is live at: {endpoint}")
 
@@ -273,7 +277,7 @@ def service_list(
 
     all_services: list[dict[str, Any]] = []
     for env in envs:
-        resp = _post(ListServicesRequest(org_slug=org_slug, env_id=env['env_id']))
+        resp = _post(ListServicesRequest(org_slug=org_slug, env_name=env['env_name']))
         for svc in resp.get('services', []):
             all_services.append({**svc, 'env_name': env['env_name']})
 
@@ -285,7 +289,7 @@ def service_list(
         for svc in all_services:
             run = svc.get('current_run') or {}
             state = run.get('state') or svc.get('state', '?')
-            print(f'  [{svc["env_name"]}] {svc["service_name"]}  id={svc["service_id"]}  state={state}')
+            print(f'  [{svc["env_name"]}] {svc["service_name"]}  state={state}')
     return all_services
 
 
@@ -305,47 +309,26 @@ def service_purge(
 
     results = []
     for svc in services:
-        sid = svc['service_id']
         svc_name = svc['service_name']
+        svc_env = svc['env_name']
         try:
-            # Stop first if running so delete is allowed
             if svc.get('state') == 'RUNNING':
-                from pixeltable.share.protocol.service import StopServiceRequest
-
-                _post(StopServiceRequest(org_slug=org_slug, service_id=sid))
-            _post(DeleteServiceRequest(org_slug=org_slug, service_id=sid))
-            results.append({'service_id': sid, 'deleted': True})
+                _post(StopServiceRequest(org_slug=org_slug, service_name=svc_name, env_name=svc_env))
+            _post(DeleteServiceRequest(org_slug=org_slug, service_name=svc_name, env_name=svc_env))
+            results.append({'service_name': svc_name, 'deleted': True})
             if not json_output:
-                print(f'  Deleted {svc_name} ({sid})')
+                print(f'  Deleted {svc_name}')
         except Exception as exc:
-            results.append({'service_id': sid, 'deleted': False, 'error': str(exc)})
+            results.append({'service_name': svc_name, 'deleted': False, 'error': str(exc)})
             if not json_output:
-                print(f'  Failed to delete {svc_name} ({sid}): {exc}')
+                print(f'  Failed to delete {svc_name}: {exc}')
 
     if json_output:
         print(json.dumps(results, indent=2))
 
 
-def _resolve_service_id(service_name: str, org_slug: str | None = None) -> str:
-    services = service_list(org_slug=org_slug, json_output=False)
-    matches = [s for s in services if s['service_name'] == service_name]
-    if not matches:
-        raise excs.NotFoundError(excs.ErrorCode.SERVICE_NOT_FOUND, f"Service '{service_name}' not found")
-    if len(matches) > 1:
-        ids = ', '.join(s['service_id'] for s in matches)
-        raise excs.RequestError(excs.ErrorCode.INVALID_ARGUMENT, f"Multiple services named '{service_name}': {ids}")
-    return matches[0]['service_id']
-
-
 def _list_envs(org_slug: str | None = None) -> list[dict[str, Any]]:
     return _post(ListEnvironmentsRequest(org_slug=org_slug)).get('environments', [])
-
-
-def _find_env_by_name(env_name: str, org_slug: str | None = None) -> dict[str, Any]:
-    for env in _list_envs(org_slug):
-        if env['env_name'] == env_name:
-            return env
-    raise excs.NotFoundError(excs.ErrorCode.SERVICE_NOT_FOUND, f"Environment '{env_name}' not found")
 
 
 def _post(request: Any) -> dict[str, Any]:

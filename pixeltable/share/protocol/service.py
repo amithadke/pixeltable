@@ -53,7 +53,7 @@ class CreateEnvironmentResponse(BaseModel):
 class GetEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.GET_ENVIRONMENT] = ServiceOperationType.GET_ENVIRONMENT
     org_slug: Optional[str] = None
-    env_id: str
+    env_name: str
 
 
 class GetEnvironmentResponse(BaseModel):
@@ -72,8 +72,8 @@ class ListEnvironmentsResponse(BaseModel):
 class UpdateEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.UPDATE_ENVIRONMENT] = ServiceOperationType.UPDATE_ENVIRONMENT
     org_slug: Optional[str] = None
-    env_id: str
-    env_name: Optional[str] = None
+    env_name: str  # current name — identifies which environment to update
+    new_name: Optional[str] = None  # rename to this name if provided
     cpus: Optional[float] = None
     memory_gb: Optional[float] = None
     disk_gb: Optional[float] = None
@@ -94,11 +94,11 @@ class UpdateEnvironmentResponse(BaseModel):
 class DeleteEnvironmentRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.DELETE_ENVIRONMENT] = ServiceOperationType.DELETE_ENVIRONMENT
     org_slug: Optional[str] = None
-    env_id: str
+    env_name: str
 
 
 class DeleteEnvironmentResponse(BaseModel):
-    env_id: str
+    env_name: str
 
 
 # ── Environment secrets ───────────────────────────────────────────────────────
@@ -107,36 +107,36 @@ class DeleteEnvironmentResponse(BaseModel):
 class AddEnvSecretRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.ADD_ENV_SECRET] = ServiceOperationType.ADD_ENV_SECRET
     org_slug: Optional[str] = None
-    env_id: str
+    env_name: str
     secret_name: str
     secret_value: str
 
 
 class AddEnvSecretResponse(BaseModel):
-    env_id: str
+    env_name: str
     secret_name: str
 
 
 class RemoveEnvSecretRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.REMOVE_ENV_SECRET] = ServiceOperationType.REMOVE_ENV_SECRET
     org_slug: Optional[str] = None
-    env_id: str
+    env_name: str
     secret_name: str
 
 
 class RemoveEnvSecretResponse(BaseModel):
-    env_id: str
+    env_name: str
     secret_name: str
 
 
 class ListEnvSecretsRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.LIST_ENV_SECRETS] = ServiceOperationType.LIST_ENV_SECRETS
     org_slug: Optional[str] = None
-    env_id: str
+    env_name: str
 
 
 class ListEnvSecretsResponse(BaseModel):
-    env_id: str
+    env_name: str
     secret_names: list[str]
 
 
@@ -182,7 +182,7 @@ class ServiceRecord(BaseModel):
 class CreateServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.CREATE_SERVICE] = ServiceOperationType.CREATE_SERVICE
     org_slug: Optional[str] = None
-    env_id: str
+    env_name: str
     service_name: str
     workers_min: int = 1
     workers_max: int = 1
@@ -197,7 +197,8 @@ class CreateServiceResponse(BaseModel):
 class GetServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.GET_SERVICE] = ServiceOperationType.GET_SERVICE
     org_slug: Optional[str] = None
-    service_id: str
+    service_name: str
+    env_name: Optional[str] = None  # narrows search; required if service name not unique across org
 
 
 class GetServiceResponse(BaseModel):
@@ -207,7 +208,7 @@ class GetServiceResponse(BaseModel):
 class ListServicesRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.LIST_SERVICES] = ServiceOperationType.LIST_SERVICES
     org_slug: Optional[str] = None
-    env_id: str
+    env_name: str
 
 
 class ListServicesResponse(BaseModel):
@@ -217,7 +218,8 @@ class ListServicesResponse(BaseModel):
 class StopServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.STOP_SERVICE] = ServiceOperationType.STOP_SERVICE
     org_slug: Optional[str] = None
-    service_id: str
+    service_name: str
+    env_name: Optional[str] = None
 
 
 class StopServiceResponse(BaseModel):
@@ -227,7 +229,8 @@ class StopServiceResponse(BaseModel):
 class StartServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.START_SERVICE] = ServiceOperationType.START_SERVICE
     org_slug: Optional[str] = None
-    service_id: str
+    service_name: str
+    env_name: Optional[str] = None
 
 
 class StartServiceResponse(BaseModel):
@@ -237,11 +240,12 @@ class StartServiceResponse(BaseModel):
 class DeleteServiceRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.DELETE_SERVICE] = ServiceOperationType.DELETE_SERVICE
     org_slug: Optional[str] = None
-    service_id: str
+    service_name: str
+    env_name: Optional[str] = None
 
 
 class DeleteServiceResponse(BaseModel):
-    service_id: str
+    service_name: str
 
 
 # ── Deploy (two-step: request presigned URL, then finalize) ──────────────────
@@ -258,7 +262,6 @@ class DeployRequest(BaseModel):
 class DeployRequestResponse(BaseModel):
     upload_id: str
     upload_url: str  # presigned PUT URL for tar.bz2, TTL 1h
-    service_id: str  # resolved service ID, returned for use in polling
 
 
 class FinalizeDeployRequest(BaseModel):
@@ -314,7 +317,8 @@ class GetServiceRunResponse(BaseModel):
 class ListServiceRunsRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.LIST_SERVICE_RUNS] = ServiceOperationType.LIST_SERVICE_RUNS
     org_slug: Optional[str] = None
-    service_id: str
+    service_name: str
+    env_name: Optional[str] = None
 
 
 class ListServiceRunsResponse(BaseModel):
