@@ -468,15 +468,14 @@ class TestDeployCloud:
         # ── Deploy 1: 1 worker ─────────────────────────────────────────────────
         _write_toml(workers=1)
         with capture_console_output() as out1:
-            service_ids = deploy(deployment_name, watch=True, org_slug=org_slug)
+            deploy(deployment_name, watch=True, org_slug=org_slug)
         assert 'is live at:' in out1.getvalue().lower(), f'Deploy 1 output:\n{out1.getvalue()}'
         endpoint = _extract_endpoint(out1.getvalue())
-        service_id = service_ids[svc_name]
 
         api_key = os.environ['PIXELTABLE_API_KEY']
         auth_headers = {'X-api-key': api_key}
 
-        run1 = service_get(service_id, org_slug=org_slug)['service']['current_run']
+        run1 = service_get(svc_name, env_name=env_name, org_slug=org_slug)['service']['current_run']
         assert run1 is not None, 'No current_run after deploy 1'
         assert run1['workers_min'] == 1, f"Deploy 1: expected workers_min=1, got {run1.get('workers_min')}"
         assert run1['workers_max'] == 1
@@ -556,12 +555,11 @@ class TestDeployCloud:
             # ── Deploy 2: 3 workers (same service) ────────────────────────────
             _write_toml(workers=3)
             with capture_console_output() as out2:
-                service_ids2 = deploy(deployment_name, watch=True, org_slug=org_slug)
+                deploy(deployment_name, watch=True, org_slug=org_slug)
             assert 'is live at:' in out2.getvalue().lower(), f'Deploy 2 output:\n{out2.getvalue()}'
             endpoint2 = _extract_endpoint(out2.getvalue())
-            assert service_ids2[svc_name] == service_id, 'Redeploy must reuse the same service_id'
 
-            run2 = service_get(service_id, org_slug=org_slug)['service']['current_run']
+            run2 = service_get(svc_name, env_name=env_name, org_slug=org_slug)['service']['current_run']
             assert run2 is not None, 'No current_run after deploy 2'
             assert run2['workers_min'] == 3, f"Deploy 2: expected workers_min=3, got {run2.get('workers_min')}"
             assert run2['workers_max'] == 3
@@ -576,7 +574,7 @@ class TestDeployCloud:
             assert resp.json() == {'upper_text': 'AFTER REDEPLOY', 'text_len': 14}, resp.text
 
             # list_service_runs must return both runs with correct per-run worker counts.
-            all_runs = service_list_runs(service_id, org_slug=org_slug)
+            all_runs = service_list_runs(svc_name, env_name=env_name, org_slug=org_slug)
             assert len(all_runs) == 2, f'Expected 2 service runs, got {len(all_runs)}: {all_runs}'
             by_version = {r['version']: r for r in all_runs}
             assert by_version['v1']['workers_min'] == 1, f"v1 workers_min: {by_version['v1'].get('workers_min')}"
@@ -584,9 +582,8 @@ class TestDeployCloud:
             print(f'list_service_runs: v1.workers_min={by_version["v1"]["workers_min"]} '
                   f'v2.workers_min={by_version["v2"]["workers_min"]} ✓')
         finally:
-            for sid in service_ids.values():
-                try:
-                    service_delete(sid, org_slug=org_slug)
-                except Exception:
-                    pass
+            try:
+                service_delete(svc_name, org_slug=org_slug)
+            except Exception:
+                pass
 
