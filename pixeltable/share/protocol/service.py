@@ -140,6 +140,39 @@ class ListEnvSecretsResponse(BaseModel):
     secret_names: list[str]
 
 
+# ── Org secrets ───────────────────────────────────────────────────────────────
+
+
+class AddOrgSecretRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.ADD_ORG_SECRET] = ServiceOperationType.ADD_ORG_SECRET
+    org_slug: Optional[str] = None
+    secret_name: str
+    secret_value: str
+
+
+class AddOrgSecretResponse(BaseModel):
+    secret_name: str
+
+
+class RemoveOrgSecretRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.REMOVE_ORG_SECRET] = ServiceOperationType.REMOVE_ORG_SECRET
+    org_slug: Optional[str] = None
+    secret_name: str
+
+
+class RemoveOrgSecretResponse(BaseModel):
+    secret_name: str
+
+
+class ListOrgSecretsRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.LIST_ORG_SECRETS] = ServiceOperationType.LIST_ORG_SECRETS
+    org_slug: Optional[str] = None
+
+
+class ListOrgSecretsResponse(BaseModel):
+    secret_names: list[str]
+
+
 # ── Run (shared record, referenced by ServiceRecord) ─────────────────────────
 
 
@@ -167,16 +200,13 @@ class ServiceRunRecord(BaseModel):
 
 class ServiceRecord(BaseModel):
     service_id: str
-    env_id: str
     org_id: str
     service_name: str
-    state: str  # STOPPED | DEPLOYING | UPDATING | RUNNING | FAILED
-    workers_min: int
-    workers_max: int
     scale_to_zero: bool
     description: Optional[str]
     created_at: float
     current_run: Optional[ServiceRunRecord] = None
+    current_runs: list[ServiceRunRecord] = []
 
 
 class CreateServiceRequest(BaseModel):
@@ -208,7 +238,7 @@ class GetServiceResponse(BaseModel):
 class ListServicesRequest(BaseModel):
     operation_type: Literal[ServiceOperationType.LIST_SERVICES] = ServiceOperationType.LIST_SERVICES
     org_slug: Optional[str] = None
-    env_name: str
+    env_name: Optional[str] = None
 
 
 class ListServicesResponse(BaseModel):
@@ -323,3 +353,49 @@ class ListServiceRunsRequest(BaseModel):
 
 class ListServiceRunsResponse(BaseModel):
     runs: list[ServiceRunRecord]
+
+
+# ── Node Pool ─────────────────────────────────────────────────────────────────
+
+
+class NodePoolRecord(BaseModel):
+    node_pool_id: str
+    name: str
+    provider: str
+    region: str
+    instance_type: str
+    count: int
+    created_at: float
+
+
+class CreateNodePoolRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.CREATE_NODE_POOL] = ServiceOperationType.CREATE_NODE_POOL
+    org_slug: Optional[str] = None
+    node_pool_name: str
+    provider: str = 'northflank'
+    region: str = 'nf-default'
+    instance_type: str
+    count: int
+
+
+class CreateNodePoolResponse(BaseModel):
+    node_pool: NodePoolRecord
+
+
+class DeleteNodePoolRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.DELETE_NODE_POOL] = ServiceOperationType.DELETE_NODE_POOL
+    org_slug: Optional[str] = None
+    node_pool_name: str
+
+
+class DeleteNodePoolResponse(BaseModel):
+    node_pool_name: str
+
+
+class ListNodePoolsRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.LIST_NODE_POOLS] = ServiceOperationType.LIST_NODE_POOLS
+    org_slug: Optional[str] = None
+
+
+class ListNodePoolsResponse(BaseModel):
+    node_pools: list[NodePoolRecord]

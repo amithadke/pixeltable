@@ -56,5 +56,13 @@ class ServiceOperationType(str, Enum):
     REMOVE_ENV_SECRET = 'remove_env_secret'
     LIST_ENV_SECRETS = 'list_env_secrets'
 
+    ADD_ORG_SECRET = 'add_org_secret'
+    REMOVE_ORG_SECRET = 'remove_org_secret'
+    LIST_ORG_SECRETS = 'list_org_secrets'
+
+    CREATE_NODE_POOL = 'create_node_pool'
+    DELETE_NODE_POOL = 'delete_node_pool'
+    LIST_NODE_POOLS = 'list_node_pools'
+
 
 SERVICE_OPERATIONS = frozenset(ServiceOperationType)

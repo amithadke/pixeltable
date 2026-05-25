@@ -14,17 +14,23 @@ from pixeltable.serving._config import lookup_deployment_config
 from pixeltable.serving.deploy import build_deploy_bundle
 from pixeltable.share.protocol.service import (
     AddEnvSecretRequest,
+    AddOrgSecretRequest,
     CreateEnvironmentRequest,
+    CreateNodePoolRequest,
     DeleteEnvironmentRequest,
+    DeleteNodePoolRequest,
     DeleteServiceRequest,
     DeployRequest,
     FinalizeDeployRequest,
     GetServiceRequest,
     ListEnvironmentsRequest,
     ListEnvSecretsRequest,
+    ListNodePoolsRequest,
+    ListOrgSecretsRequest,
     ListServiceRunsRequest,
     ListServicesRequest,
     RemoveEnvSecretRequest,
+    RemoveOrgSecretRequest,
     StartServiceRequest,
     StopServiceRequest,
     UpdateEnvironmentRequest,
@@ -271,15 +277,12 @@ def service_list(
     org_slug: str | None = None, env_name: str | None = None, json_output: bool = False
 ) -> list[dict[str, Any]]:
     """List all cloud services for an org, optionally filtered by environment."""
-    envs = _list_envs(org_slug)
     if env_name:
-        envs = [e for e in envs if e['env_name'] == env_name]
-
-    all_services: list[dict[str, Any]] = []
-    for env in envs:
-        resp = _post(ListServicesRequest(org_slug=org_slug, env_name=env['env_name']))
-        for svc in resp.get('services', []):
-            all_services.append({**svc, 'env_name': env['env_name']})
+        resp = _post(ListServicesRequest(org_slug=org_slug, env_name=env_name))
+        all_services = resp.get('services', [])
+    else:
+        resp = _post(ListServicesRequest(org_slug=org_slug))
+        all_services = resp.get('services', [])
 
     if json_output:
         print(json.dumps(all_services, indent=2))
@@ -287,9 +290,14 @@ def service_list(
         if not all_services:
             print('No services found.')
         for svc in all_services:
-            run = svc.get('current_run') or {}
-            state = run.get('state') or svc.get('state', '?')
-            print(f'  [{svc["env_name"]}] {svc["service_name"]}  state={state}')
+            runs = svc.get('current_runs') or ([svc['current_run']] if svc.get('current_run') else [])
+            if runs:
+                for run in runs:
+                    env_n = run.get('env_name', '?')
+                    state = run.get('state', '?')
+                    print(f'  [{env_n}] {svc["service_name"]}  state={state}')
+            else:
+                print(f'  {svc["service_name"]}  state=STOPPED')
     return all_services
 
 
@@ -325,6 +333,82 @@ def service_purge(
 
     if json_output:
         print(json.dumps(results, indent=2))
+
+
+def org_secret_add(key: str, value: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    _post(AddOrgSecretRequest(org_slug=org_slug, secret_name=key, secret_value=value))
+    if json_output:
+        print(json.dumps({'added': key}))
+    else:
+        print(f"Secret '{key}' added to org.")
+
+
+def org_secret_remove(key: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    _post(RemoveOrgSecretRequest(org_slug=org_slug, secret_name=key))
+    if json_output:
+        print(json.dumps({'removed': key}))
+    else:
+        print(f"Secret '{key}' removed from org.")
+
+
+def org_secret_list(org_slug: str | None = None, json_output: bool = False) -> list[str]:
+    resp = _post(ListOrgSecretsRequest(org_slug=org_slug))
+    secret_names: list[str] = resp.get('secret_names', [])
+    if json_output:
+        print(json.dumps(secret_names))
+    elif not secret_names:
+        print('No org secrets.')
+    else:
+        for name in secret_names:
+            print(f'  {name}')
+    return secret_names
+
+
+def node_pool_create(
+    name: str,
+    instance_type: str,
+    count: int,
+    provider: str = 'northflank',
+    region: str = 'nf-default',
+    org_slug: str | None = None,
+    json_output: bool = False,
+) -> None:
+    resp = _post(
+        CreateNodePoolRequest(
+            org_slug=org_slug,
+            node_pool_name=name,
+            provider=provider,
+            region=region,
+            instance_type=instance_type,
+            count=count,
+        )
+    )
+    if json_output:
+        print(json.dumps(resp.get('node_pool', {})))
+    else:
+        pool = resp.get('node_pool', {})
+        print(f"  {pool.get('name')}  ({pool.get('provider')}/{pool.get('region')}, {pool.get('count')}× {pool.get('instance_type')})")
+
+
+def node_pool_delete(name: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    _post(DeleteNodePoolRequest(org_slug=org_slug, node_pool_name=name))
+    if json_output:
+        print(json.dumps({'deleted': name}))
+    else:
+        print(f"Deleted node pool '{name}'.")
+
+
+def node_pool_list(org_slug: str | None = None, json_output: bool = False) -> list[dict]:
+    resp = _post(ListNodePoolsRequest(org_slug=org_slug))
+    pools = resp.get('node_pools', [])
+    if json_output:
+        print(json.dumps(pools))
+    elif not pools:
+        print('No node pools.')
+    else:
+        for pool in pools:
+            print(f"  {pool['name']}  ({pool['provider']}/{pool['region']}, {pool['count']}× {pool['instance_type']})")
+    return pools
 
 
 def _list_envs(org_slug: str | None = None) -> list[dict[str, Any]]:
