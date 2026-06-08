@@ -27,6 +27,7 @@ class EnvironmentRecord(BaseModel):
     gpu: Optional[str]
     created_at: float
     updated_at: float
+    cluster_id: str = ''  # ID of the org cluster this env is pinned to
 
 
 class CreateEnvironmentRequest(BaseModel):
@@ -37,6 +38,7 @@ class CreateEnvironmentRequest(BaseModel):
     memory_gb: Optional[float] = None
     disk_gb: Optional[float] = None
     gpu: Optional[str] = None
+    cluster_id: Optional[str] = None  # which org cluster to use; defaults to org's first cluster
 
     @field_validator('gpu')
     @classmethod

@@ -178,12 +178,7 @@ def environment_update(
 ) -> None:
     resp = _post(
         UpdateEnvironmentRequest(
-            org_slug=org_slug,
-            env_name=env_name,
-            new_name=new_name,
-            cpus=cpus,
-            memory_gb=memory_gb,
-            disk_gb=disk_gb,
+            org_slug=org_slug, env_name=env_name, new_name=new_name, cpus=cpus, memory_gb=memory_gb, disk_gb=disk_gb
         )
     )
     updated_env = resp['environment']
@@ -241,9 +236,9 @@ def service_list_runs(
     service_name: str, env_name: str | None = None, org_slug: str | None = None
 ) -> list[dict[str, Any]]:
     """Return all run records for a service, each with workers_min/workers_max."""
-    return _post(
-        ListServiceRunsRequest(org_slug=org_slug, service_name=service_name, env_name=env_name)
-    ).get('runs', [])
+    return _post(ListServiceRunsRequest(org_slug=org_slug, service_name=service_name, env_name=env_name)).get(
+        'runs', []
+    )
 
 
 def service_delete(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
@@ -387,7 +382,9 @@ def node_pool_create(
         print(json.dumps(resp.get('node_pool', {})))
     else:
         pool = resp.get('node_pool', {})
-        print(f"  {pool.get('name')}  ({pool.get('provider')}/{pool.get('region')}, {pool.get('count')}× {pool.get('instance_type')})")
+        print(
+            f'  {pool.get("name")}  ({pool.get("provider")}/{pool.get("region")}, {pool.get("count")}× {pool.get("instance_type")})'
+        )
 
 
 def node_pool_delete(name: str, org_slug: str | None = None, json_output: bool = False) -> None:
@@ -407,7 +404,7 @@ def node_pool_list(org_slug: str | None = None, json_output: bool = False) -> li
         print('No node pools.')
     else:
         for pool in pools:
-            print(f"  {pool['name']}  ({pool['provider']}/{pool['region']}, {pool['count']}× {pool['instance_type']})")
+            print(f'  {pool["name"]}  ({pool["provider"]}/{pool["region"]}, {pool["count"]}× {pool["instance_type"]})')
     return pools
 
 

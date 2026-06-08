@@ -1638,6 +1638,7 @@ class TestFastAPI:
 
         prefix = 'https://pxt.run/myorg/prod/my-svc/jobs'
         import pixeltable.serving._fastapi as _fastapi_mod
+
         monkeypatch.setattr(_fastapi_mod, '_JOB_URL_PREFIX', prefix)
         client = make_test_client(router)
 

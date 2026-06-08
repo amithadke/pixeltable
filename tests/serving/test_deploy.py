@@ -11,8 +11,8 @@ import textwrap
 import time
 import uuid
 from pathlib import Path
-from uuid import UUID
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
 import requests
@@ -26,7 +26,7 @@ from pixeltable.runtime import get_runtime
 from pixeltable.serving._config import create_service_from_config, lookup_service_config
 from pixeltable.serving.bootstrap import _create_tables_from_md
 from pixeltable.serving.deploy import build_deploy_bundle
-from pixeltable.share.deploy_client import deploy, service_delete, service_get, service_list_runs
+from pixeltable.share.deploy_client import deploy, environment_create, environment_delete, service_delete, service_get, service_list_runs
 from tests.utils import (
     capture_console_output,
     pxt_raises,
@@ -374,16 +374,16 @@ class TestDeployCloud:
     """
 
     def test_deploy_e2e(self, uses_db: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """pxt deploy end-to-end: bundle → cloud API → CodeBuild → Northflank → RUNNING → /health 200."""
+        """pxt deploy end-to-end: bundle → cloud API → CodeBuild → EKS → RUNNING → /health 200."""
         skip_test_if_no_pxt_credentials()
         skip_test_if_not_installed('fastapi')
 
         uid = uuid.uuid4().hex[:8]
-        # Use a pre-existing environment; create it once via:
-        #   PIXELTABLE_API_KEY=<key> pxt environment create pytest --org <slug> --cpus 0.5 --memory-gb 1.0 --disk-gb 20
-        env_name = os.environ.get('PXT_TEST_ENV_NAME', 'pytest')
+        env_name = f'pytest-{uid}'
         org_slug = os.environ['PXT_TEST_ORG_SLUG']  # required: org_slug is mandatory for all service ops
         svc_name = f'test-svc-{uid}'
+
+        environment_create(env_name, cpus=0.5, memory_gb=0.5, disk_gb=20.0, org_slug=org_slug)
 
         t1 = pxt.create_table('deploy_tbl', {'text': pxt.String})
         t1.add_computed_column(upper_text=t1.text.upper())
@@ -453,7 +453,8 @@ class TestDeployCloud:
                 env = "{env_name}"
                 workers = {workers}
 
-                """) + service_routes
+                """)
+                + service_routes
             )
             Config.init({}, reinit=True)
 
@@ -477,7 +478,7 @@ class TestDeployCloud:
 
         run1 = service_get(svc_name, env_name=env_name, org_slug=org_slug)['service']['current_run']
         assert run1 is not None, 'No current_run after deploy 1'
-        assert run1['workers_min'] == 1, f"Deploy 1: expected workers_min=1, got {run1.get('workers_min')}"
+        assert run1['workers_min'] == 1, f'Deploy 1: expected workers_min=1, got {run1.get("workers_min")}'
         assert run1['workers_max'] == 1
         assert run1['version'] == 'v1'
         print(f'Deploy 1: workers_min={run1["workers_min"]} version={run1["version"]} endpoint={endpoint} ✓')
@@ -561,7 +562,7 @@ class TestDeployCloud:
 
             run2 = service_get(svc_name, env_name=env_name, org_slug=org_slug)['service']['current_run']
             assert run2 is not None, 'No current_run after deploy 2'
-            assert run2['workers_min'] == 3, f"Deploy 2: expected workers_min=3, got {run2.get('workers_min')}"
+            assert run2['workers_min'] == 3, f'Deploy 2: expected workers_min=3, got {run2.get("workers_min")}'
             assert run2['workers_max'] == 3
             assert run2['version'] == 'v2'
             print(f'Deploy 2: workers_min={run2["workers_min"]} version={run2["version"]} endpoint={endpoint2} ✓')
@@ -577,13 +578,18 @@ class TestDeployCloud:
             all_runs = service_list_runs(svc_name, env_name=env_name, org_slug=org_slug)
             assert len(all_runs) == 2, f'Expected 2 service runs, got {len(all_runs)}: {all_runs}'
             by_version = {r['version']: r for r in all_runs}
-            assert by_version['v1']['workers_min'] == 1, f"v1 workers_min: {by_version['v1'].get('workers_min')}"
-            assert by_version['v2']['workers_min'] == 3, f"v2 workers_min: {by_version['v2'].get('workers_min')}"
-            print(f'list_service_runs: v1.workers_min={by_version["v1"]["workers_min"]} '
-                  f'v2.workers_min={by_version["v2"]["workers_min"]} ✓')
+            assert by_version['v1']['workers_min'] == 1, f'v1 workers_min: {by_version["v1"].get("workers_min")}'
+            assert by_version['v2']['workers_min'] == 3, f'v2 workers_min: {by_version["v2"].get("workers_min")}'
+            print(
+                f'list_service_runs: v1.workers_min={by_version["v1"]["workers_min"]} '
+                f'v2.workers_min={by_version["v2"]["workers_min"]} ✓'
+            )
         finally:
             try:
                 service_delete(svc_name, org_slug=org_slug)
             except Exception:
                 pass
-
+            try:
+                environment_delete(env_name, org_slug=org_slug)
+            except Exception:
+                pass
