@@ -15,14 +15,18 @@ from pixeltable.serving.deploy import build_deploy_bundle
 from pixeltable.share.protocol.service import (
     AddEnvSecretRequest,
     AddOrgSecretRequest,
+    CreateClusterRequest,
     CreateEnvironmentRequest,
     CreateNodePoolRequest,
+    DeleteClusterRequest,
     DeleteEnvironmentRequest,
     DeleteNodePoolRequest,
     DeleteServiceRequest,
     DeployRequest,
     FinalizeDeployRequest,
+    GetClusterRequest,
     GetServiceRequest,
+    ListClustersRequest,
     ListEnvironmentsRequest,
     ListEnvSecretsRequest,
     ListNodePoolsRequest,
@@ -33,6 +37,7 @@ from pixeltable.share.protocol.service import (
     RemoveOrgSecretRequest,
     StartServiceRequest,
     StopServiceRequest,
+    UpdateClusterRequest,
     UpdateEnvironmentRequest,
 )
 from pixeltable.share.publish import PIXELTABLE_API_URL, _api_headers, _upload_to_presigned_url
@@ -249,8 +254,8 @@ def service_delete(service_name: str, org_slug: str | None = None, json_output: 
         print(f"Deleted service '{service_name}'.")
 
 
-def service_stop(service_name: str, org_slug: str | None = None, json_output: bool = False) -> None:
-    _post(StopServiceRequest(org_slug=org_slug, service_name=service_name))
+def service_stop(service_name: str, env_name: str | None = None, org_slug: str | None = None, json_output: bool = False) -> None:
+    _post(StopServiceRequest(org_slug=org_slug, service_name=service_name, env_name=env_name))
     if json_output:
         print(json.dumps({'stopped': service_name}))
     else:
@@ -408,6 +413,108 @@ def node_pool_list(org_slug: str | None = None, json_output: bool = False) -> li
     return pools
 
 
+def cluster_create(
+    name: str,
+    instance: str = 't3.small',
+    max_nodes: int = 1,
+    reclaim_policy: str = 'conservative',
+    reclaim_after: int = 10,
+    location: str = 'aws',
+    region: str = 'us-east-1',
+    k8s_cluster_name: str = '',
+    org_slug: str | None = None,
+    json_output: bool = False,
+) -> dict[str, Any]:
+    resp = _post(
+        CreateClusterRequest(
+            org_slug=org_slug,
+            name=name,
+            instance=instance,
+            max_nodes=max_nodes,
+            reclaim_policy=reclaim_policy,
+            reclaim_after=reclaim_after,
+            location=location,
+            region=region,
+            k8s_cluster_name=k8s_cluster_name,
+        )
+    )
+    cluster = resp['cluster']
+    if json_output:
+        print(json.dumps(cluster))
+    else:
+        _print_cluster(cluster)
+    return cluster
+
+
+def cluster_get(name: str, org_slug: str | None = None, json_output: bool = False) -> dict[str, Any]:
+    resp = _post(GetClusterRequest(org_slug=org_slug, name=name))
+    cluster = resp['cluster']
+    if json_output:
+        print(json.dumps(cluster))
+    else:
+        _print_cluster(cluster)
+    return cluster
+
+
+def cluster_list(org_slug: str | None = None, json_output: bool = False) -> list[dict[str, Any]]:
+    resp = _post(ListClustersRequest(org_slug=org_slug))
+    clusters = resp.get('clusters', [])
+    if json_output:
+        print(json.dumps(clusters))
+    elif not clusters:
+        print('No clusters.')
+    else:
+        for c in clusters:
+            _print_cluster(c)
+    return clusters
+
+
+def cluster_update(
+    name: str,
+    new_name: str | None = None,
+    instance: str | None = None,
+    max_nodes: int | None = None,
+    reclaim_policy: str | None = None,
+    reclaim_after: int | None = None,
+    location: str | None = None,
+    region: str | None = None,
+    force: bool = False,
+    org_slug: str | None = None,
+    json_output: bool = False,
+) -> dict[str, Any]:
+    resp = _post(
+        UpdateClusterRequest(
+            org_slug=org_slug,
+            name=name,
+            new_name=new_name,
+            instance=instance,
+            max_nodes=max_nodes,
+            reclaim_policy=reclaim_policy,
+            reclaim_after=reclaim_after,
+            location=location,
+            region=region,
+            force=force,
+        )
+    )
+    cluster = resp['cluster']
+    warning = resp.get('warning')
+    if json_output:
+        print(json.dumps(resp))
+    else:
+        if warning:
+            Env.get().console_logger.warning(warning)
+        _print_cluster(cluster)
+    return cluster
+
+
+def cluster_delete(name: str, org_slug: str | None = None, json_output: bool = False) -> None:
+    _post(DeleteClusterRequest(org_slug=org_slug, name=name))
+    if json_output:
+        print(json.dumps({'deleted': name}))
+    else:
+        print(f"Deleted cluster '{name}'.")
+
+
 def _list_envs(org_slug: str | None = None) -> list[dict[str, Any]]:
     return _post(ListEnvironmentsRequest(org_slug=org_slug)).get('environments', [])
 
@@ -429,3 +536,12 @@ def _print_env(env: dict[str, Any]) -> None:
     print(f'  {env["env_name"]}  (id: {env["env_id"]})')
     print(f'    CPUs: {env["cpus"]},  Memory: {env["memory_gb"]} GB,  Disk: {env["disk_gb"]} GB')
     print(f'    Version: {env["version"]}')
+
+
+def _print_cluster(c: dict[str, Any]) -> None:
+    location = c.get('location', 'aws').upper()
+    region = c.get('region', '')
+    loc_str = f'{location} / {region}' if region else location
+    print(f'  {c["name"]}  ({loc_str})')
+    print(f'    Instance: {c["instance"]},  Max nodes: {c["max_nodes"]}')
+    print(f'    Reclaim policy: {c["reclaim_policy"]},  Reclaim after: {c["reclaim_after"]}m')

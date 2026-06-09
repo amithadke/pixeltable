@@ -27,7 +27,7 @@ class EnvironmentRecord(BaseModel):
     gpu: Optional[str]
     created_at: float
     updated_at: float
-    cluster_id: str = ''  # ID of the org cluster this env is pinned to
+    cluster_name: str = ''  # name of the org cluster this env is pinned to
 
 
 class CreateEnvironmentRequest(BaseModel):
@@ -38,7 +38,7 @@ class CreateEnvironmentRequest(BaseModel):
     memory_gb: Optional[float] = None
     disk_gb: Optional[float] = None
     gpu: Optional[str] = None
-    cluster_id: Optional[str] = None  # which org cluster to use; defaults to org's first cluster
+    cluster_name: Optional[str] = None  # which org cluster to use; defaults to org's first cluster
 
     @field_validator('gpu')
     @classmethod
@@ -401,3 +401,83 @@ class ListNodePoolsRequest(BaseModel):
 
 class ListNodePoolsResponse(BaseModel):
     node_pools: list[NodePoolRecord]
+
+
+# ── Cluster ───────────────────────────────────────────────────────────────────
+
+
+class ClusterRecord(BaseModel):
+    name: str
+    org_id: str
+    instance: str
+    max_nodes: int
+    reclaim_policy: str
+    reclaim_after: int
+    location: str = 'aws'
+    region: str = 'us-east-1'
+    k8s_cluster_name: str = ''
+    node_pool_id: str = ''
+
+
+class CreateClusterRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.CREATE_CLUSTER] = ServiceOperationType.CREATE_CLUSTER
+    org_slug: Optional[str] = None
+    name: str
+    instance: str = 't3.small'
+    max_nodes: int = 1
+    reclaim_policy: str = 'conservative'
+    reclaim_after: int = 10
+    location: str = 'aws'
+    region: str = 'us-east-1'
+    k8s_cluster_name: str = ''
+
+
+class CreateClusterResponse(BaseModel):
+    cluster: ClusterRecord
+
+
+class GetClusterRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.GET_CLUSTER] = ServiceOperationType.GET_CLUSTER
+    org_slug: Optional[str] = None
+    name: str
+
+
+class GetClusterResponse(BaseModel):
+    cluster: ClusterRecord
+
+
+class ListClustersRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.LIST_CLUSTERS] = ServiceOperationType.LIST_CLUSTERS
+    org_slug: Optional[str] = None
+
+
+class ListClustersResponse(BaseModel):
+    clusters: list[ClusterRecord]
+
+
+class UpdateClusterRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.UPDATE_CLUSTER] = ServiceOperationType.UPDATE_CLUSTER
+    org_slug: Optional[str] = None
+    name: str
+    new_name: Optional[str] = None
+    instance: Optional[str] = None
+    max_nodes: Optional[int] = None
+    reclaim_policy: Optional[str] = None
+    reclaim_after: Optional[int] = None
+    location: Optional[str] = None
+    region: Optional[str] = None
+    force: bool = False  # required to apply disruptive changes (instance type, max_nodes reduction)
+
+
+class UpdateClusterResponse(BaseModel):
+    cluster: ClusterRecord
+
+
+class DeleteClusterRequest(BaseModel):
+    operation_type: Literal[ServiceOperationType.DELETE_CLUSTER] = ServiceOperationType.DELETE_CLUSTER
+    org_slug: Optional[str] = None
+    name: str
+
+
+class DeleteClusterResponse(BaseModel):
+    name: str

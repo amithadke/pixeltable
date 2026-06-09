@@ -64,5 +64,11 @@ class ServiceOperationType(str, Enum):
     DELETE_NODE_POOL = 'delete_node_pool'
     LIST_NODE_POOLS = 'list_node_pools'
 
+    CREATE_CLUSTER = 'create_cluster'
+    GET_CLUSTER = 'get_cluster'
+    LIST_CLUSTERS = 'list_clusters'
+    UPDATE_CLUSTER = 'update_cluster'
+    DELETE_CLUSTER = 'delete_cluster'
+
 
 SERVICE_OPERATIONS = frozenset(ServiceOperationType)
