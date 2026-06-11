@@ -148,11 +148,15 @@ def environment_create(
     cpus: float | None = None,
     memory_gb: float | None = None,
     disk_gb: float | None = None,
+    cluster_name: str | None = None,
     org_slug: str | None = None,
     json_output: bool = False,
 ) -> None:
     resp = _post(
-        CreateEnvironmentRequest(org_slug=org_slug, env_name=env_name, cpus=cpus, memory_gb=memory_gb, disk_gb=disk_gb)
+        CreateEnvironmentRequest(
+            org_slug=org_slug, env_name=env_name, cpus=cpus, memory_gb=memory_gb, disk_gb=disk_gb,
+            cluster_name=cluster_name,
+        )
     )
     env = resp['environment']
     if json_output:

@@ -104,6 +104,7 @@ def main() -> None:
     env_create.add_argument('--cpus', type=float, default=None, help='vCPUs per replica')
     env_create.add_argument('--memory-gb', type=float, default=None, dest='memory_gb', help='Memory in GB')
     env_create.add_argument('--disk-gb', type=float, default=None, dest='disk_gb', help='Disk in GB')
+    env_create.add_argument('--cluster', default=None, dest='cluster_name', help='Cluster name to pin this environment to')
     env_create.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
     env_list = env_sub.add_parser('list', help='List environments')
@@ -172,6 +173,52 @@ def main() -> None:
     svc_purge.add_argument('-y', '--yes', action='store_true', dest='yes', help='Skip confirmation prompt')
     svc_purge.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
 
+    cluster_parser = subparsers.add_parser('cluster', help='Manage org clusters')
+    cluster_sub = cluster_parser.add_subparsers(dest='cluster_command', required=True)
+
+    cluster_create_p = cluster_sub.add_parser('create', help='Create a new cluster')
+    cluster_create_p.add_argument('name', help='Cluster name')
+    cluster_create_p.add_argument('--org', required=True, dest='org', help='Organization slug')
+    cluster_create_p.add_argument('--instance', default='t3.small', help='Instance type (default: t3.small)')
+    cluster_create_p.add_argument('--max-nodes', type=int, default=1, dest='max_nodes', help='Max autoscaled nodes (default: 1)')
+    cluster_create_p.add_argument('--location', default='aws', help='Cloud provider (default: aws)')
+    cluster_create_p.add_argument('--region', default='us-east-1', help='Region (default: us-east-1)')
+    cluster_create_p.add_argument('--k8s-cluster-name', default='', dest='k8s_cluster_name', help='Physical K8s cluster name (default: empty = shared cluster)')
+    cluster_create_p.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    cluster_get_p = cluster_sub.add_parser('get', help='Get cluster details')
+    cluster_get_p.add_argument('name', help='Cluster name')
+    cluster_get_p.add_argument('--org', required=True, dest='org', help='Organization slug')
+    cluster_get_p.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    cluster_list_p = cluster_sub.add_parser('list', help='List clusters for an org')
+    cluster_list_p.add_argument('--org', required=True, dest='org', help='Organization slug')
+    cluster_list_p.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    cluster_delete_p = cluster_sub.add_parser('delete', help='Delete a cluster')
+    cluster_delete_p.add_argument('name', help='Cluster name')
+    cluster_delete_p.add_argument('--org', required=True, dest='org', help='Organization slug')
+    cluster_delete_p.add_argument('-y', '--yes', action='store_true', dest='yes', help='Skip confirmation prompt')
+    cluster_delete_p.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    org_parser = subparsers.add_parser('org', help='Manage org-level settings')
+    org_sub = org_parser.add_subparsers(dest='org_command', required=True)
+
+    org_add_secret = org_sub.add_parser('add-secret', help='Add or update an org-level secret')
+    org_add_secret.add_argument('key', help='Secret key name')
+    org_add_secret.add_argument('value', help='Secret value')
+    org_add_secret.add_argument('--org', required=True, dest='org', help='Organization slug')
+    org_add_secret.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    org_remove_secret = org_sub.add_parser('remove-secret', help='Remove an org-level secret')
+    org_remove_secret.add_argument('key', help='Secret key name')
+    org_remove_secret.add_argument('--org', required=True, dest='org', help='Organization slug')
+    org_remove_secret.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
+    org_list_secrets = org_sub.add_parser('list-secrets', help='List org-level secret key names')
+    org_list_secrets.add_argument('--org', required=True, dest='org', help='Organization slug')
+    org_list_secrets.add_argument('--json', action='store_true', dest='json', help='Emit machine-readable JSON output')
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -187,6 +234,10 @@ def main() -> None:
             _environment(args)
         elif args.command == 'service':
             _service(args)
+        elif args.command == 'cluster':
+            _cluster(args)
+        elif args.command == 'org':
+            _org(args)
     except pxt.Error as e:
         _emit_error(str(e), args.json)
         sys.exit(1)
@@ -365,7 +416,9 @@ def _environment(args: argparse.Namespace) -> None:
     org_slug = getattr(args, 'org', None)
     if cmd == 'create':
         deploy_client.environment_create(
-            args.name, args.cpus, args.memory_gb, args.disk_gb, org_slug=org_slug, json_output=args.json
+            args.name, args.cpus, args.memory_gb, args.disk_gb,
+            cluster_name=getattr(args, 'cluster_name', None),
+            org_slug=org_slug, json_output=args.json
         )
     elif cmd == 'list':
         deploy_client.environment_list(org_slug=org_slug, json_output=args.json)
@@ -407,6 +460,52 @@ def _service(args: argparse.Namespace) -> None:
         deploy_client.service_purge(org_slug=org_slug, env_name=args.env, yes=args.yes, json_output=args.json)
     else:
         raise AssertionError(f'unknown service subcommand: {cmd}')
+
+
+def _cluster(args: argparse.Namespace) -> None:
+    from pixeltable.share import deploy_client
+
+    cmd = args.cluster_command
+    org_slug = args.org
+    if cmd == 'create':
+        deploy_client.cluster_create(
+            args.name,
+            instance=args.instance,
+            max_nodes=args.max_nodes,
+            location=args.location,
+            region=args.region,
+            k8s_cluster_name=args.k8s_cluster_name,
+            org_slug=org_slug,
+            json_output=args.json,
+        )
+    elif cmd == 'get':
+        deploy_client.cluster_get(args.name, org_slug=org_slug, json_output=args.json)
+    elif cmd == 'list':
+        deploy_client.cluster_list(org_slug=org_slug, json_output=args.json)
+    elif cmd == 'delete':
+        if not args.yes:
+            confirm = input(f"Delete cluster '{args.name}'? This cannot be undone. [y/N] ").strip().lower()
+            if confirm not in ('y', 'yes'):
+                print('Aborted.')
+                return
+        deploy_client.cluster_delete(args.name, org_slug=org_slug, json_output=args.json)
+    else:
+        raise AssertionError(f'unknown cluster subcommand: {cmd}')
+
+
+def _org(args: argparse.Namespace) -> None:
+    from pixeltable.share import deploy_client
+
+    cmd = args.org_command
+    org_slug = args.org
+    if cmd == 'add-secret':
+        deploy_client.org_secret_add(args.key, args.value, org_slug=org_slug, json_output=args.json)
+    elif cmd == 'remove-secret':
+        deploy_client.org_secret_remove(args.key, org_slug=org_slug, json_output=args.json)
+    elif cmd == 'list-secrets':
+        deploy_client.org_secret_list(org_slug=org_slug, json_output=args.json)
+    else:
+        raise AssertionError(f'unknown org subcommand: {cmd}')
 
 
 def _serve(args: argparse.Namespace) -> None:
