@@ -26,7 +26,7 @@ from pixeltable.runtime import get_runtime
 from pixeltable.serving._config import create_service_from_config, lookup_service_config
 from pixeltable.serving.bootstrap import _create_tables_from_md
 from pixeltable.serving.deploy import build_deploy_bundle
-from pixeltable.share.deploy_client import deploy, environment_create, environment_delete, service_delete, service_get, service_list_runs
+from pixeltable.share.deploy_client import deploy, environment_create, environment_delete, service_delete, service_get, service_list_runs, service_stop
 from tests.utils import (
     capture_console_output,
     pxt_raises,
@@ -585,6 +585,10 @@ class TestDeployCloud:
                 f'v2.workers_min={by_version["v2"]["workers_min"]} ✓'
             )
         finally:
+            try:
+                service_stop(svc_name, org_slug=org_slug)
+            except Exception:
+                pass
             try:
                 service_delete(svc_name, org_slug=org_slug)
             except Exception:

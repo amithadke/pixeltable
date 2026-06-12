@@ -60,7 +60,7 @@ def deploy(
         env_org_slug = org_slug
         env_name = cfg.env
 
-    service_name = cfg.name
+    service_name = cfg.service
 
     deploy_resp = _post(
         DeployRequest(
